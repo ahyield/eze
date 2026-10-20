@@ -69,6 +69,7 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	s.apex.HandleFunc("POST /_q/cli/authorize", s.handleCLIAuthorize)
 	s.apex.HandleFunc("GET /_q/api/me", s.handleMe)
 	s.apex.HandleFunc("GET /_q/api/sites", s.handleListSites)
+	s.apex.HandleFunc("GET /_q/api/sites/{name}", s.handleGetSite)
 	s.apex.HandleFunc("PUT /_q/api/sites/{name}", s.handleDeploy)
 	s.apex.HandleFunc("DELETE /_q/api/sites/{name}", s.handleDeleteSite)
 	s.apex.HandleFunc("GET /_q/api/tokens", s.handleListTokens)

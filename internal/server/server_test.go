@@ -773,3 +773,17 @@ func TestCLITokensExpire(t *testing.T) {
 		t.Errorf("CLI token expires in %v, want about 30 days", d)
 	}
 }
+
+func TestGetSiteAPI(t *testing.T) {
+	e := newEnv(t)
+	e.deploy("blog", ana, map[string]string{"index.html": "1"})
+	e.deploy("blog", bo, map[string]string{"index.html": "2", "a.js": "x"})
+	got := decode[map[string]any](t, e.do(req{url: "https://eze.test/_q/api/sites/blog", headers: e.bearer(ana)}))
+	deploys, _ := got["deploys"].([]any)
+	if got["name"] != "blog" || got["url"] != "https://blog.eze.test/" || got["deployed_by"] != bo || len(deploys) != 2 {
+		t.Errorf("site = %v", got)
+	}
+	if w := e.do(req{url: "https://eze.test/_q/api/sites/nope", headers: e.bearer(ana)}); w.Code != 404 {
+		t.Errorf("missing site = %d", w.Code)
+	}
+}

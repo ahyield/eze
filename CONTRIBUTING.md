@@ -12,7 +12,7 @@ Thanks for helping. A few things keep eze what it is:
 ## Development
 
 ```sh
-go test ./...             # needs Go 1.24+; Node 22+ also runs the browser code checks
+go test ./...             # needs Go 1.25+; Node 22+ also runs the browser code checks
 go test -race ./...
 gofmt -l .                # should print nothing
 
@@ -35,7 +35,7 @@ Sites are served at `http://<name>.localhost:8080` (Chrome and Firefox resolve `
 | `internal/uploads` | Uploaded file bytes on disk |
 | `internal/auth` | OIDC, auth-proxy headers, dev mode, API tokens |
 | `internal/ai` | The Claude provider behind `eze.ai` |
-| `internal/cli` | `eze login/init/deploy/ls/rm/whoami`, and the AGENTS.md written by `eze init` |
+| `internal/cli` | The CLI commands, `eze mcp` (the MCP server), and the AGENTS.md written by `eze init` |
 
 When you change the SDK, update `internal/cli/templates/AGENTS.md`: it is how coding agents
 learn the API.

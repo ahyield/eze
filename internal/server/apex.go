@@ -37,6 +37,28 @@ func (s *Server) handleListSites(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) handleGetSite(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	site, err := s.store.GetSite(r.Context(), name)
+	if errors.Is(err, store.ErrNotFound) || !sites.ValidName(name) {
+		writeErr(w, http.StatusNotFound, "no site named "+name)
+		return
+	}
+	if err != nil {
+		s.internalErr(w, r, err)
+		return
+	}
+	deploys, err := s.store.ListDeploys(r.Context(), name, sitePageDeploys)
+	if err != nil {
+		s.internalErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		siteResponse
+		Deploys []store.Deploy `json:"deploys"`
+	}{siteResponse{*site, s.cfg.SiteURL(name)}, deploys})
+}
+
 // checkOwner enforces EZE_OVERWRITE=owner. In the default "anyone" mode every employee can
 // overwrite or delete any site, which is the point: there is nothing to administer.
 func (s *Server) checkOwner(w http.ResponseWriter, r *http.Request, name string) bool {

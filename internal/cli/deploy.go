@@ -73,19 +73,48 @@ func Deploy(args []string) error {
 	if len(pos) == 1 {
 		dir = pos[0]
 	}
+	c, err := newClient()
+	if err != nil {
+		return err
+	}
+	res, err := deployDir(c, dir, *siteFlag, func(files int, size int64, name string) {
+		noun := "files"
+		if files == 1 {
+			noun = "file"
+		}
+		fmt.Printf("Deploying %d %s (%s) to %s...\n", files, noun, humanBytes(size), name)
+	})
+	if err != nil {
+		return err
+	}
+	if res.Warning != "" {
+		fmt.Fprintln(os.Stderr, "warning:", res.Warning)
+	}
+	fmt.Println("Live at", res.Site.URL)
+	return nil
+}
+
+type deployResult struct {
+	Site    site
+	Files   int
+	Warning string
+}
+
+// deployDir packs and uploads dir. The site name comes from siteName, then eze.json, then
+// the directory name; it is saved to eze.json so later deploys go to the same site.
+func deployDir(c *client, dir, siteName string, starting func(files int, size int64, name string)) (*deployResult, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
-		return fmt.Errorf("%s is not a directory", dir)
+		return nil, fmt.Errorf("%s is not a directory", dir)
 	}
-
 	proj, err := readProject(abs)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	name := *siteFlag
+	name := siteName
 	if name == "" && proj != nil {
 		name = proj.Site
 	}
@@ -93,42 +122,33 @@ func Deploy(args []string) error {
 		name = slug(filepath.Base(abs))
 	}
 	if !siteNameRe.MatchString(name) {
-		return fmt.Errorf("%q is not a valid site name; pass --site with lowercase letters, digits and hyphens", name)
-	}
-
-	c, err := newClient()
-	if err != nil {
-		return err
+		return nil, fmt.Errorf("%q is not a valid site name; use lowercase letters, digits and hyphens", name)
 	}
 
 	var buf bytes.Buffer
 	files, err := pack(abs, &buf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if files == 0 {
-		return fmt.Errorf("nothing to deploy in %s", dir)
+		return nil, fmt.Errorf("nothing to deploy in %s", dir)
 	}
+	res := &deployResult{Files: files}
 	if _, err := os.Stat(filepath.Join(abs, "index.html")); err != nil {
-		fmt.Fprintln(os.Stderr, "warning: no index.html at the top level, the site root will 404")
+		res.Warning = "no index.html at the top level, so the site root will show \"not found\""
 	}
-
-	noun := "files"
-	if files == 1 {
-		noun = "file"
+	if starting != nil {
+		starting(files, int64(buf.Len()), name)
 	}
-	fmt.Printf("Deploying %d %s (%s) to %s...\n", files, noun, humanBytes(int64(buf.Len())), name)
-	var res site
-	if err := c.do("PUT", "/_q/api/sites/"+url.PathEscape(name), &buf, "application/gzip", &res); err != nil {
-		return err
+	if err := c.do("PUT", "/_q/api/sites/"+url.PathEscape(name), &buf, "application/gzip", &res.Site); err != nil {
+		return nil, err
 	}
 	if proj == nil || proj.Site != name {
 		if err := writeProject(abs, &project{Site: name}); err != nil {
-			fmt.Fprintln(os.Stderr, "warning: could not save eze.json:", err)
+			res.Warning = strings.TrimPrefix(res.Warning+"; could not save eze.json: "+err.Error(), "; ")
 		}
 	}
-	fmt.Println("Live at", res.URL)
-	return nil
+	return res, nil
 }
 
 // pack writes dir as a gzipped tarball, skipping hidden files (except .well-known), symlinks and local-only files.

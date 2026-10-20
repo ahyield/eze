@@ -62,7 +62,7 @@ viewer's existing session, and rate limited per user.
 
 ## Install
 
-One binary is both the server and the CLI. With Go 1.24 or newer:
+One binary is both the server and the CLI. With Go 1.25 or newer:
 
 ```sh
 go install github.com/ahyield/eze/cmd/eze@latest
@@ -134,6 +134,35 @@ In another terminal (`*.localhost` resolves to your machine in Chrome, Firefox a
 open http://hello.localhost:8080
 ```
 
+## Use it from your AI tool (MCP)
+
+`eze mcp` gives an MCP client eze's tools, signed in as you through `eze login`. Ask your
+assistant for a site and it reads the SDK docs, writes the files and deploys them.
+
+| Tool | |
+|---|---|
+| `sdk_docs` | How to build an eze site and use `window.eze` (also the resource `eze://docs/sdk`) |
+| `deploy_folder` | Deploy a folder from your computer |
+| `deploy_files` | Deploy files passed inline, for chat apps that can't write to your disk |
+| `list_sites`, `get_site` | What exists, who deployed it, deploy history |
+| `query_collection` | Read what a site has stored in its database |
+| `whoami` | Which server and account the tools act as |
+
+There is deliberately no delete tool: removing a site stays a human decision (`eze rm`).
+
+Claude Code:
+
+```sh
+claude mcp add eze -- eze mcp
+```
+
+Claude Desktop, Cursor and most other clients take a JSON entry. Use the full path to the
+binary (`which eze`), since desktop apps don't always see your shell's `PATH`:
+
+```json
+{ "mcpServers": { "eze": { "command": "/Users/you/go/bin/eze", "args": ["mcp"] } } }
+```
+
 ## CLI
 
 ```
@@ -146,6 +175,7 @@ eze whoami                      show the signed-in user
 eze tokens [revoke <id>]        list or revoke your API tokens
 eze tokens revoke --user <email>  revoke all of someone's tokens, e.g. when they leave
 eze logout                      revoke this computer's token
+eze mcp                         serve eze's tools to an MCP client
 ```
 
 The site name comes from `--site`, then `eze.json`, then the directory name. Hidden files,

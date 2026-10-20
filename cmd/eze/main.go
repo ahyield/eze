@@ -32,6 +32,7 @@ Usage:
   eze tokens [revoke <id>]      list or revoke your API tokens
   eze tokens revoke --user <email>  revoke all of someone's tokens (offboarding)
   eze logout                    revoke this computer's token
+  eze mcp                       serve eze's tools to an MCP client (Claude Code, Cursor...)
   eze serve                     run the server (configured with EZE_* env vars)
 `
 
@@ -49,6 +50,7 @@ func main() {
 		"whoami": cli.Whoami,
 		"tokens": cli.Tokens,
 		"logout": cli.Logout,
+		"mcp":    cli.MCP,
 		"serve":  func([]string) error { return serve() },
 	}
 	cmd, ok := cmds[os.Args[1]]
