@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
+	openaioption "github.com/openai/openai-go/v3/option"
 
 	"github.com/ahyield/eze/internal/ai"
 	"github.com/ahyield/eze/internal/config"
@@ -488,5 +489,65 @@ func TestLedger(t *testing.T) {
 	l.release("a", 40)
 	if len(l.inflight) != 1 || len(l.reserved) != 1 {
 		t.Errorf("ledger not cleaned up: %v %v", l.inflight, l.reserved)
+	}
+}
+
+// openAIReply answers like an OpenAI-compatible server; usage is omitted when withUsage is false.
+func openAIReply(text string, withUsage bool) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		b, _ := json.Marshal(text)
+		sseLine := func(data string) {
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			w.(http.Flusher).Flush()
+		}
+		sseLine(`{"id":"c","object":"chat.completion.chunk","created":1,"model":"llama3.3","choices":[{"index":0,"delta":{"role":"assistant","content":` + string(b) + `},"finish_reason":null}]}`)
+		sseLine(`{"id":"c","object":"chat.completion.chunk","created":1,"model":"llama3.3","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`)
+		if withUsage {
+			sseLine(`{"id":"c","object":"chat.completion.chunk","created":1,"model":"llama3.3","choices":[],"usage":{"prompt_tokens":20,"completion_tokens":5,"total_tokens":25}}`)
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}
+}
+
+func openAIEnv(t *testing.T, reply func(http.ResponseWriter, *http.Request)) *env {
+	t.Helper()
+	fake := newFakeAnthropic(t, reply) // records requests; the path differs but the handler doesn't care
+	e := newEnv(t, func(c *config.Config) {
+		c.AIProvider = config.AIOpenAI
+		c.AIModels = []string{"llama3.3"}
+		c.AIDefaultModel = "llama3.3"
+		c.AIMaxOutputTokens = 500
+	})
+	e.srv.ai = ai.NewOpenAI("", fake.srv.URL+"/v1/", openaioption.WithMaxRetries(0))
+	return e
+}
+
+func TestAIThroughOpenAICompatibleProvider(t *testing.T) {
+	e := openAIEnv(t, openAIReply("Hello from llama", true))
+	w := chat(e, map[string]any{"stream": true, "messages": hello["messages"]})
+	events := readSSE(t, w.Body)
+	if len(events) != 2 || events[0][1] != `{"text":"Hello from llama"}` || events[1][0] != "done" {
+		t.Fatalf("events = %v", events)
+	}
+	if n, _ := e.store.AITokensUsed(context.Background(), ana, time.Now()); n != 25 {
+		t.Errorf("recorded = %d, want the reported 25", n)
+	}
+	if u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/ai/usage", as: ana})); u["provider"] != "openai" {
+		t.Errorf("usage = %v", u)
+	}
+	if w := chat(e, map[string]any{"model": "claude-opus-5-5", "messages": hello["messages"]}); w.Code != 400 {
+		t.Errorf("a model outside EZE_AI_MODELS = %d", w.Code)
+	}
+}
+
+func TestAIOpenAIServerWithoutUsageIsChargedTheReservation(t *testing.T) {
+	e := openAIEnv(t, openAIReply("hi", false))
+	if w := chat(e, hello); w.Code != 200 {
+		t.Fatalf("chat = %d %s", w.Code, w.Body)
+	}
+	want := estimateInputTokens(&chatRequest{Messages: []ai.Message{{Role: "user", Content: "hi"}}}) + 500
+	if n, _ := e.store.AITokensUsed(context.Background(), ana, time.Now()); n != want {
+		t.Errorf("recorded = %d, want the reservation %d", n, want)
 	}
 }

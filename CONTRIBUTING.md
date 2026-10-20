@@ -12,7 +12,7 @@ Thanks for helping. A few things keep eze what it is:
 ## Development
 
 ```sh
-go test ./...             # needs Go 1.25+; Node 22+ also runs the browser code checks
+go test ./...             # needs Go 1.26+; Node 22+ also runs the browser code checks
 go test -race ./...
 gofmt -l .                # should print nothing
 

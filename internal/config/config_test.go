@@ -16,7 +16,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"EZE_OVERWRITE", "EZE_MAX_DEPLOY_BYTES", "EZE_MAX_SITE_BYTES", "EZE_MAX_SITE_FILES",
 		"EZE_MAX_DOC_BYTES", "EZE_RATE_LIMIT", "EZE_RATE_BURST", "EZE_MAX_UPLOAD_BYTES", "EZE_UPLOAD_QUOTA_BYTES",
 		"EZE_ANTHROPIC_API_KEY", "EZE_ANTHROPIC_BASE_URL", "EZE_AI_MODELS", "EZE_AI_DEFAULT_MODEL", "EZE_AI_DAILY_TOKENS",
-		"EZE_AI_MAX_OUTPUT_TOKENS", "EZE_OIDC_ALLOW_PUBLIC_DOMAINS", "EZE_OIDC_ALLOW_UNVERIFIED_EMAIL", "EZE_TOKEN_TTL_DAYS", "EZE_AI_MAX_CONCURRENT",
+		"EZE_AI_MAX_OUTPUT_TOKENS", "EZE_OIDC_ALLOW_PUBLIC_DOMAINS", "EZE_OIDC_ALLOW_UNVERIFIED_EMAIL", "EZE_TOKEN_TTL_DAYS", "EZE_AI_MAX_CONCURRENT", "EZE_AI_PROVIDER", "EZE_OPENAI_API_KEY", "EZE_OPENAI_BASE_URL",
 	} {
 		t.Setenv(k, "")
 	}
@@ -66,8 +66,13 @@ func TestLoad(t *testing.T) {
 		{"dev on localhost", map[string]string{"EZE_DOMAIN": "localhost:8080", "EZE_AUTH": "dev", "EZE_ADDR": "localhost:8080"}, ""},
 		{"bad scheme", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_SCHEME": "ftp"}, "EZE_SCHEME"},
 		{"bad overwrite", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_OVERWRITE": "nobody"}, "EZE_OVERWRITE"},
-		{"default model not allowed", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_MODELS": "claude-haiku-5-5"}, "EZE_AI_DEFAULT_MODEL"},
-		{"custom models", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_MODELS": "claude-haiku-5-5", "EZE_AI_DEFAULT_MODEL": "claude-haiku-5-5"}, ""},
+		{"default model not allowed", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_ANTHROPIC_API_KEY": "k", "EZE_AI_MODELS": "claude-haiku-5-5", "EZE_AI_DEFAULT_MODEL": "claude-opus-5-5"}, "EZE_AI_DEFAULT_MODEL"},
+		{"custom models", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_ANTHROPIC_API_KEY": "k", "EZE_AI_MODELS": "claude-haiku-5-5"}, ""},
+		{"both providers, none chosen", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_ANTHROPIC_API_KEY": "k", "EZE_OPENAI_API_KEY": "k"}, "EZE_AI_PROVIDER"},
+		{"openai without models", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_OPENAI_API_KEY": "k"}, "EZE_AI_MODELS"},
+		{"provider without its key", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_PROVIDER": "anthropic"}, "EZE_ANTHROPIC_API_KEY"},
+		{"unknown provider", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_PROVIDER": "gemini"}, "EZE_AI_PROVIDER"},
+		{"local openai-compatible, no key", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_OPENAI_BASE_URL": "http://localhost:11434/v1", "EZE_AI_MODELS": "llama3.3"}, ""},
 		{"bad int", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_MAX_DOC_BYTES": "-1"}, "EZE_MAX_DOC_BYTES"},
 	}
 	for _, tt := range tests {
@@ -109,5 +114,38 @@ func TestCookieDomain(t *testing.T) {
 		if got := (&Config{Domain: domain}).CookieDomain(); got != want {
 			t.Errorf("CookieDomain(%q) = %q, want %q", domain, got, want)
 		}
+	}
+}
+
+func TestAIProviderSelection(t *testing.T) {
+	base := map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header"}
+	with := func(extra map[string]string) *Config {
+		t.Helper()
+		env := map[string]string{}
+		for k, v := range base {
+			env[k] = v
+		}
+		for k, v := range extra {
+			env[k] = v
+		}
+		setEnv(t, env)
+		c, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if c := with(nil); c.AIProvider != "" {
+		t.Errorf("no keys: provider %q, want AI off", c.AIProvider)
+	}
+	if c := with(map[string]string{"EZE_ANTHROPIC_API_KEY": "k"}); c.AIProvider != AIAnthropic || c.AIDefaultModel != "claude-opus-5-5" || len(c.AIModels) != 3 {
+		t.Errorf("anthropic = %q %q %v", c.AIProvider, c.AIDefaultModel, c.AIModels)
+	}
+	c := with(map[string]string{"EZE_OPENAI_BASE_URL": "http://localhost:11434/v1", "EZE_AI_MODELS": "llama3.3, qwen3"})
+	if c.AIProvider != AIOpenAI || c.AIDefaultModel != "llama3.3" || c.OpenAIBaseURL != "http://localhost:11434/v1" {
+		t.Errorf("ollama = %q %q %q", c.AIProvider, c.AIDefaultModel, c.OpenAIBaseURL)
+	}
+	if c := with(map[string]string{"EZE_ANTHROPIC_API_KEY": "k", "EZE_OPENAI_API_KEY": "k", "EZE_AI_PROVIDER": "openai", "EZE_AI_MODELS": "m"}); c.AIProvider != AIOpenAI {
+		t.Errorf("explicit provider = %q", c.AIProvider)
 	}
 }

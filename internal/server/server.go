@@ -54,8 +54,11 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 		apex:     http.NewServeMux(),
 		site:     http.NewServeMux(),
 	}
-	if cfg.AnthropicAPIKey != "" {
+	switch cfg.AIProvider {
+	case config.AIAnthropic:
 		s.ai = ai.NewAnthropic(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL)
+	case config.AIOpenAI:
+		s.ai = ai.NewOpenAI(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL)
 	}
 	authn.Mount(s.public)
 

@@ -31,7 +31,7 @@ type chatRequest struct {
 
 func (s *Server) aiEnabled(w http.ResponseWriter) bool {
 	if s.ai == nil {
-		writeErr(w, http.StatusServiceUnavailable, "AI is not configured on this server (EZE_ANTHROPIC_API_KEY)")
+		writeErr(w, http.StatusServiceUnavailable, "AI is not configured on this server (EZE_ANTHROPIC_API_KEY, or EZE_OPENAI_API_KEY / EZE_OPENAI_BASE_URL)")
 		return false
 	}
 	return true
@@ -150,6 +150,7 @@ func (s *Server) handleAIUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled":        s.ai != nil,
+		"provider":       s.cfg.AIProvider,
 		"used":           used,
 		"limit":          s.cfg.AIDailyTokens,
 		"resets_at":      nextUTCMidnight(now),
@@ -211,7 +212,7 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if res == nil || res.Usage.Total() == 0 {
+	if res == nil || (res.Usage.Total() == 0 && res.Text == "" && res.StopReason == "") {
 		return // the provider never started the reply, so nothing was billed
 	}
 	charged := res.Usage

@@ -93,6 +93,25 @@ Restrict `EZE_TRUSTED_PROXIES` to the address `cloudflared` connects from (usual
 
 Set `EZE_AUTH_EMAIL_HEADER=Tailscale-User-Login` and `EZE_AUTH_NAME_HEADER=Tailscale-User-Name`.
 
+## AI for sites (optional)
+
+`eze.ai` is off until you configure a provider. Pick one:
+
+```sh
+# Claude
+EZE_ANTHROPIC_API_KEY=sk-ant-...
+
+# OpenAI
+EZE_OPENAI_API_KEY=sk-... EZE_AI_MODELS=<model>,<another-model>
+
+# Any OpenAI-compatible server, e.g. a model you host with Ollama or vLLM
+EZE_OPENAI_BASE_URL=http://gpu-box:11434/v1 EZE_AI_MODELS=<model>
+```
+
+With an OpenAI-compatible server, check that it reports token usage on streamed replies
+(`stream_options.include_usage`). If it doesn't, eze charges each reply its full reservation
+against the person's budget, because it can't know the real count.
+
 ## Docker
 
 ```sh

@@ -19,6 +19,9 @@ const (
 	AuthOIDC   = "oidc"
 	AuthDev    = "dev"
 
+	AIAnthropic = "anthropic"
+	AIOpenAI    = "openai"
+
 	OverwriteAnyone = "anyone"
 	OverwriteOwner  = "owner"
 )
@@ -57,9 +60,12 @@ type Config struct {
 	MaxUploadBytes int64 // single uploaded file
 	UploadQuota    int64 // total uploaded bytes per site
 
-	// AI proxy; disabled unless AnthropicAPIKey is set.
+	// AI proxy; AIProvider is "" when AI is off.
+	AIProvider        string
 	AnthropicAPIKey   string
 	AnthropicBaseURL  string // optional, e.g. a corporate gateway
+	OpenAIAPIKey      string
+	OpenAIBaseURL     string // an OpenAI-compatible server; empty means api.openai.com
 	AIModels          []string
 	AIDefaultModel    string
 	AIDailyTokens     int64 // per user, input + output, across all sites
@@ -109,12 +115,8 @@ func Load() (*Config, error) {
 	if c.UploadQuota, err = envInt("EZE_UPLOAD_QUOTA_BYTES", 1<<30); err != nil {
 		return nil, err
 	}
-	c.AnthropicAPIKey = env("EZE_ANTHROPIC_API_KEY", "")
-	c.AnthropicBaseURL = env("EZE_ANTHROPIC_BASE_URL", "")
-	c.AIModels = splitList(env("EZE_AI_MODELS", "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"))
-	c.AIDefaultModel = env("EZE_AI_DEFAULT_MODEL", "claude-opus-5-5")
-	if !slices.Contains(c.AIModels, c.AIDefaultModel) {
-		return nil, fmt.Errorf("EZE_AI_DEFAULT_MODEL %q must be one of EZE_AI_MODELS", c.AIDefaultModel)
+	if err := c.loadAI(); err != nil {
+		return nil, err
 	}
 	if c.AIDailyTokens, err = envInt("EZE_AI_DAILY_TOKENS", 1_000_000); err != nil {
 		return nil, err
@@ -197,6 +199,57 @@ func Load() (*Config, error) {
 	}
 
 	return c, nil
+}
+
+func (c *Config) loadAI() error {
+	c.AnthropicAPIKey = env("EZE_ANTHROPIC_API_KEY", "")
+	c.AnthropicBaseURL = env("EZE_ANTHROPIC_BASE_URL", "")
+	c.OpenAIAPIKey = env("EZE_OPENAI_API_KEY", "")
+	c.OpenAIBaseURL = env("EZE_OPENAI_BASE_URL", "")
+	anthropicSet := c.AnthropicAPIKey != ""
+	openAISet := c.OpenAIAPIKey != "" || c.OpenAIBaseURL != ""
+
+	c.AIProvider = env("EZE_AI_PROVIDER", "")
+	switch c.AIProvider {
+	case "":
+		switch {
+		case anthropicSet && openAISet:
+			return errors.New("both Anthropic and OpenAI settings are present; set EZE_AI_PROVIDER to anthropic or openai")
+		case anthropicSet:
+			c.AIProvider = AIAnthropic
+		case openAISet:
+			c.AIProvider = AIOpenAI
+		default:
+			return nil // AI off
+		}
+	case AIAnthropic:
+		if !anthropicSet {
+			return errors.New("EZE_AI_PROVIDER=anthropic needs EZE_ANTHROPIC_API_KEY")
+		}
+	case AIOpenAI:
+		if !openAISet {
+			return errors.New("EZE_AI_PROVIDER=openai needs EZE_OPENAI_API_KEY, or EZE_OPENAI_BASE_URL for a local server")
+		}
+	default:
+		return fmt.Errorf("EZE_AI_PROVIDER must be %q or %q", AIAnthropic, AIOpenAI)
+	}
+	if c.AIProvider == AIOpenAI && c.OpenAIBaseURL == "" && c.OpenAIAPIKey == "" {
+		return errors.New("api.openai.com needs EZE_OPENAI_API_KEY")
+	}
+
+	models := env("EZE_AI_MODELS", "")
+	if models == "" {
+		if c.AIProvider != AIAnthropic {
+			return errors.New("set EZE_AI_MODELS to the models pages may use, e.g. the ones your OpenAI-compatible server offers")
+		}
+		models = "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"
+	}
+	c.AIModels = splitList(models)
+	c.AIDefaultModel = env("EZE_AI_DEFAULT_MODEL", c.AIModels[0])
+	if !slices.Contains(c.AIModels, c.AIDefaultModel) {
+		return fmt.Errorf("EZE_AI_DEFAULT_MODEL %q must be one of EZE_AI_MODELS", c.AIDefaultModel)
+	}
+	return nil
 }
 
 // CookieDomain is the apex hostname without port, used so a session covers every site.

@@ -120,7 +120,8 @@ Images, video, audio, PDFs, plain text, CSV and JSON open in the browser; other 
 
 ### AI
 
-Call Claude from the page. The server holds the API key; each person has a daily token
+Call the AI model this eze server is configured with (Claude, an OpenAI model, or a model the
+organisation hosts itself). The server holds the API key; each person has a daily token
 budget shared across all sites. Check `(await eze.ai.usage()).enabled` first if the feature is optional.
 
 ```js
@@ -138,7 +139,8 @@ const res = await eze.ai.chat(
 );
 // res: { text, model, stop_reason, usage: { input_tokens, output_tokens } }
 
-const u = await eze.ai.usage(); // { enabled, used, limit, resets_at, models, default_model, max_tokens_cap }
+const u = await eze.ai.usage(); // { enabled, provider, used, limit, resets_at, models, default_model, max_tokens_cap }
+// Pass { model } only with one of u.models; leave it out to use the default.
 ```
 
 Messages are text only. Stream (`onText`) anything a person waits on. Check `res.stop_reason`:

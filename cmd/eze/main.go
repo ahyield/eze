@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -68,6 +69,14 @@ func main() {
 }
 
 func serve() error {
+	// The AI SDKs read OPENAI_* and ANTHROPIC_* by default. eze is configured only through
+	// EZE_*, so a key or base URL left in the environment must not be picked up by accident.
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "OPENAI_") || strings.HasPrefix(name, "ANTHROPIC_") {
+			os.Unsetenv(name)
+		}
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return err

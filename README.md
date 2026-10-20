@@ -62,7 +62,7 @@ viewer's existing session, and rate limited per user.
 
 ## Install
 
-One binary is both the server and the CLI. With Go 1.25 or newer:
+One binary is both the server and the CLI. With Go 1.26 or newer:
 
 ```sh
 go install github.com/ahyield/eze/cmd/eze@latest
@@ -109,10 +109,13 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_MAX_DOC_BYTES` | 1 MB | Max database document. |
 | `EZE_MAX_UPLOAD_BYTES` | 25 MB | Max uploaded file. |
 | `EZE_UPLOAD_QUOTA_BYTES` | 1 GB | Total uploads per site. |
-| `EZE_ANTHROPIC_API_KEY` | | Enables `eze.ai`. Without it, AI calls return 503. |
+| `EZE_AI_PROVIDER` | inferred | `anthropic` or `openai`. Only needed if both providers' settings are present. Without any, `eze.ai` returns 503. |
+| `EZE_ANTHROPIC_API_KEY` | | Use Claude for `eze.ai`. |
 | `EZE_ANTHROPIC_BASE_URL` | | Optional API gateway in front of Anthropic. |
-| `EZE_AI_MODELS` | `claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5` | Models pages may request. |
-| `EZE_AI_DEFAULT_MODEL` | `claude-opus-5-5` | Used when a page doesn't pick one. |
+| `EZE_OPENAI_API_KEY` | | Use OpenAI, or a hosted OpenAI-compatible API, for `eze.ai`. |
+| `EZE_OPENAI_BASE_URL` | api.openai.com | An OpenAI-compatible server, e.g. `https://openrouter.ai/api/v1` or Ollama's `http://localhost:11434/v1` (which needs no key). |
+| `EZE_AI_MODELS` | the current Claude models | Models pages may request. Required for `openai`, since model names depend on the server. |
+| `EZE_AI_DEFAULT_MODEL` | the first of `EZE_AI_MODELS` | Used when a page doesn't pick one. |
 | `EZE_AI_DAILY_TOKENS` | 1000000 | Per-person daily budget (input + output), across all sites. Resets at 00:00 UTC. |
 | `EZE_AI_MAX_OUTPUT_TOKENS` | 16000 | Cap on a single reply. |
 | `EZE_AI_MAX_CONCURRENT` | 3 | AI calls one person may have running at once. |
@@ -188,7 +191,11 @@ them from your identity provider stops new sign-ins; also run
 
 ## AI spend
 
-`eze.ai` makes every signed-in person a potential API spender, so it is bounded several ways:
+`eze.ai` works with Claude (through Anthropic's SDK), OpenAI, or any OpenAI-compatible server,
+so you can point it at a model your organisation already pays for or hosts itself. eze ignores
+`OPENAI_*` and `ANTHROPIC_*` environment variables; only `EZE_*` settings count.
+
+It makes every signed-in person a potential API spender, so it is bounded several ways:
 
 - A per-person daily token budget. Before each call, eze reserves its worst case (the prompt
   size plus `max_tokens`) against what is left, so parallel calls can't overspend together.

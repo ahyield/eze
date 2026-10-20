@@ -149,8 +149,7 @@ func resultOf(msg *anthropic.BetaMessage) *Result {
 	}
 }
 
-// mapError turns SDK errors into statuses that make sense to a page: problems with the
-// request are the page's to fix (400), everything else is the server's (502/503).
+// mapError turns Anthropic SDK errors into statuses that make sense to a page.
 func mapError(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return err
@@ -159,12 +158,18 @@ func mapError(err error) error {
 	if !errors.As(err, &apierr) {
 		return &Error{Status: http.StatusBadGateway, Message: "could not reach the AI provider"}
 	}
-	switch {
-	case apierr.StatusCode == http.StatusBadRequest || apierr.StatusCode == http.StatusRequestEntityTooLarge:
-		return &Error{Status: http.StatusBadRequest, Message: "the AI provider rejected the request: " + providerMessage(apierr)}
-	case apierr.StatusCode == http.StatusTooManyRequests || apierr.StatusCode == 529:
+	return statusError(apierr.StatusCode, providerMessage(apierr.RawJSON(), apierr.StatusCode))
+}
+
+// statusError maps a provider's HTTP status: problems with the request are the page's to
+// fix (400), everything else is the server's (502/503).
+func statusError(status int, message string) *Error {
+	switch status {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusRequestEntityTooLarge, http.StatusUnprocessableEntity:
+		return &Error{Status: http.StatusBadRequest, Message: "the AI provider rejected the request: " + message}
+	case http.StatusTooManyRequests, 529:
 		return &Error{Status: http.StatusServiceUnavailable, Message: "the AI provider is busy, try again shortly"}
-	case apierr.StatusCode == http.StatusUnauthorized || apierr.StatusCode == http.StatusForbidden:
+	case http.StatusUnauthorized, http.StatusForbidden:
 		return &Error{Status: http.StatusBadGateway, Message: "the server's AI credentials were rejected; tell whoever runs eze"}
 	default:
 		return &Error{Status: http.StatusBadGateway, Message: "the AI provider failed"}
@@ -173,14 +178,14 @@ func mapError(err error) error {
 
 // providerMessage extracts the human-readable message from an API error body, which is
 // either the whole response ({"error":{"message":...}}) or just its error object.
-func providerMessage(apierr *anthropic.Error) string {
+func providerMessage(raw string, status int) string {
 	var body struct {
 		Message string `json:"message"`
 		Error   struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if json.Unmarshal([]byte(apierr.RawJSON()), &body) == nil {
+	if json.Unmarshal([]byte(raw), &body) == nil {
 		if body.Error.Message != "" {
 			return body.Error.Message
 		}
@@ -188,5 +193,5 @@ func providerMessage(apierr *anthropic.Error) string {
 			return body.Message
 		}
 	}
-	return http.StatusText(apierr.StatusCode)
+	return http.StatusText(status)
 }
