@@ -1,5 +1,10 @@
 # eze
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
+  <img alt="A lunch-vote folder deployed with eze deploy becomes a live poll at lunch-vote.eze.acme.com, with four coworkers voting" src="docs/hero-light.png">
+</picture>
+
 Drop in a folder of HTML and get back a private URL that only people in your organisation can open.
 No frameworks, pipelines or config files. Need data? Every site gets a database, realtime updates, file uploads,
 multiplayer rooms, AI and the viewer's identity through a tiny browser SDK, with nothing to set up.

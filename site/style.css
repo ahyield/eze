@@ -80,7 +80,7 @@ header nav a:hover { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .meter b { animation: none; } }
 .here { display: flex; align-items: center; gap: 10px; margin-top: 22px; font-size: 14px; color: var(--stone); }
 .faces { display: flex; }
-.faces span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; border: 2px solid var(--panel); margin-left: -6px; }
+.faces span { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; color: #fff; box-shadow: 0 0 0 2px var(--panel); margin-left: -3px; }
 .faces span:first-child { margin-left: 0; }
 
 /* Sections */
