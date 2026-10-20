@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ahyield/eze/internal/ai"
 	"github.com/ahyield/eze/internal/auth"
 	"github.com/ahyield/eze/internal/config"
 	"github.com/ahyield/eze/internal/sites"
@@ -25,6 +26,7 @@ type Server struct {
 	uploads *uploads.Store
 	hub     *hub
 	rooms   *rooms
+	ai      ai.Provider // nil when AI is not configured
 	limiter *rateLimiter
 
 	public *http.ServeMux // apex routes reachable without a user (login flow)
@@ -50,6 +52,9 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 		apex:    http.NewServeMux(),
 		site:    http.NewServeMux(),
 	}
+	if cfg.AnthropicAPIKey != "" {
+		s.ai = ai.NewAnthropic(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL)
+	}
 	authn.Mount(s.public)
 
 	s.apex.HandleFunc("GET /{$}", s.handleIndex)
@@ -72,6 +77,8 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	s.site.HandleFunc("DELETE /_q/db/{collection}/{id}", s.handleDeleteDoc)
 	s.site.HandleFunc("GET /_q/subscribe/{collection}", s.handleSubscribe)
 	s.site.HandleFunc("GET /_q/ws/{room}", s.handleRoom)
+	s.site.HandleFunc("POST /_q/ai/chat", s.handleAIChat)
+	s.site.HandleFunc("GET /_q/ai/usage", s.handleAIUsage)
 	s.site.HandleFunc("POST /_q/files", s.handleUpload)
 	s.site.HandleFunc("GET /_q/files", s.handleListFiles)
 	s.site.HandleFunc("GET /_q/files/{id}", s.handleGetFile)

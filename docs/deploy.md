@@ -108,5 +108,8 @@ All state lives in `EZE_DATA_DIR`: `sites/` (deployed files), `uploads/` (files 
 through sites) and `eze.db` (SQLite, WAL mode). Back up with `sqlite3 eze.db ".backup backup.db"`
 plus a copy of `sites/` and `uploads/`.
 
+`eze.ai` replies stream as server-sent events. eze sends `X-Accel-Buffering: no` so nginx
+won't buffer them; other proxies may need response buffering turned off for `/_q/ai/`.
+
 If a reverse proxy limits request bodies (nginx defaults to 1 MB), raise it to at least
 `EZE_MAX_UPLOAD_BYTES` and `EZE_MAX_DEPLOY_BYTES`, e.g. `client_max_body_size 64m;`.

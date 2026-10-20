@@ -55,6 +55,11 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 		UploadQuota:     1 << 18,
 		RateLimit:       1000,
 		RateBurst:       1000,
+
+		AIModels:          []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"},
+		AIDefaultModel:    "claude-opus-5-5",
+		AIDailyTokens:     1_000_000,
+		AIMaxOutputTokens: 16_000,
 	}
 	for _, m := range mutate {
 		m(cfg)

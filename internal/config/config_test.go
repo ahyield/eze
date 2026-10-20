@@ -15,6 +15,8 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"EZE_OIDC_CLIENT_SECRET", "EZE_OIDC_ALLOWED_DOMAINS", "EZE_SESSION_SECRET", "EZE_DEV_EMAIL",
 		"EZE_OVERWRITE", "EZE_MAX_DEPLOY_BYTES", "EZE_MAX_SITE_BYTES", "EZE_MAX_SITE_FILES",
 		"EZE_MAX_DOC_BYTES", "EZE_RATE_LIMIT", "EZE_RATE_BURST", "EZE_MAX_UPLOAD_BYTES", "EZE_UPLOAD_QUOTA_BYTES",
+		"EZE_ANTHROPIC_API_KEY", "EZE_ANTHROPIC_BASE_URL", "EZE_AI_MODELS", "EZE_AI_DEFAULT_MODEL", "EZE_AI_DAILY_TOKENS",
+		"EZE_AI_MAX_OUTPUT_TOKENS",
 	} {
 		t.Setenv(k, "")
 	}
@@ -55,6 +57,8 @@ func TestLoad(t *testing.T) {
 		{"dev on localhost", map[string]string{"EZE_DOMAIN": "localhost:8080", "EZE_AUTH": "dev", "EZE_ADDR": "localhost:8080"}, ""},
 		{"bad scheme", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_SCHEME": "ftp"}, "EZE_SCHEME"},
 		{"bad overwrite", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_OVERWRITE": "nobody"}, "EZE_OVERWRITE"},
+		{"default model not allowed", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_MODELS": "claude-haiku-5-5"}, "EZE_AI_DEFAULT_MODEL"},
+		{"custom models", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_AI_MODELS": "claude-haiku-5-5", "EZE_AI_DEFAULT_MODEL": "claude-haiku-5-5"}, ""},
 		{"bad int", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_MAX_DOC_BYTES": "-1"}, "EZE_MAX_DOC_BYTES"},
 	}
 	for _, tt := range tests {

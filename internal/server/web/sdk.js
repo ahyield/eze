@@ -285,6 +285,84 @@
     },
   };
 
+  // readEvents parses a server-sent event stream, calling onEvent(name, data) for each event.
+  async function readEvents(body, onEvent) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      buf += decoder.decode(value, { stream: true });
+      let end;
+      while ((end = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, end);
+        buf = buf.slice(end + 2);
+        let name = 'message';
+        let data = '';
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('event: ')) name = line.slice(7);
+          else if (line.startsWith('data: ')) data += line.slice(6);
+        }
+        onEvent(name, data ? JSON.parse(data) : null);
+      }
+    }
+  }
+
+  const ai = {
+    // chat(prompt | messages, opts) resolves to { text, model, stop_reason, usage }.
+    //   prompt:   a string, or messages: [{ role: 'user' | 'assistant', content: string }, ...]
+    //   opts:     { system, model, maxTokens, effort, onText(chunk, textSoFar), signal }
+    // With onText the reply streams in as it's written. stop_reason 'refusal' means the
+    // model declined; 'max_tokens' means the reply was cut off.
+    async chat(input, opts = {}) {
+      const messages = typeof input === 'string' ? [{ role: 'user', content: input }] : input;
+      const body = {
+        messages,
+        system: opts.system,
+        model: opts.model,
+        max_tokens: opts.maxTokens,
+        effort: opts.effort,
+        stream: Boolean(opts.onText),
+      };
+      const res = await fetch('/_q/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new EzeError(res.status, (data && data.error) || res.statusText);
+      }
+      if (!opts.onText) return res.json();
+
+      let text = '';
+      let result = null;
+      let failure = null;
+      await readEvents(res.body, (name, data) => {
+        if (name === 'text') {
+          text += data.text;
+          opts.onText(data.text, text);
+        } else if (name === 'done') {
+          result = data;
+        } else if (name === 'error') {
+          failure = new EzeError(data.status, data.error);
+        }
+      });
+      if (failure) throw failure;
+      if (!result) throw new EzeError(0, 'the reply was interrupted');
+      return result;
+    },
+
+    // usage() resolves to { enabled, used, limit, resets_at, models, default_model, max_tokens_cap }
+    // for the signed-in user (budgets are per person, across all sites).
+    usage() {
+      return request('GET', '/ai/usage');
+    },
+  };
+
   const files = {
     // upload(file, { name, onProgress(fraction) }) resolves to { id, name, size, content_type, url, ... }.
     // file is a File or Blob, e.g. from <input type="file"> or a canvas.
@@ -337,6 +415,7 @@
     id,
     files,
     ws,
+    ai,
     EzeError,
   };
 })();

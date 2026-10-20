@@ -333,3 +333,28 @@ func TestFiles(t *testing.T) {
 		t.Errorf("other site affected: %d", n)
 	}
 }
+
+func TestAIUsage(t *testing.T) {
+	s := open(t)
+	day := time.Date(2026, 10, 20, 23, 59, 0, 0, time.UTC)
+	next := day.Add(2 * time.Minute)
+	if n, err := s.AITokensUsed(ctx, "ana@example.com", day); err != nil || n != 0 {
+		t.Fatalf("fresh = %d, %v", n, err)
+	}
+	s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 100, 20)
+	s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 50, 5)
+	s.RecordAIUsage(ctx, "ana@example.com", "game", day, 10, 1) // budgets span sites
+	s.RecordAIUsage(ctx, "bo@example.com", "blog", day, 999, 999)
+	s.RecordAIUsage(ctx, "ana@example.com", "blog", next, 7, 0) // next UTC day
+	if n, _ := s.AITokensUsed(ctx, "ana@example.com", day); n != 186 {
+		t.Errorf("ana today = %d, want 186", n)
+	}
+	if n, _ := s.AITokensUsed(ctx, "ana@example.com", next); n != 7 {
+		t.Errorf("ana tomorrow = %d, want 7", n)
+	}
+	var requests int
+	s.db.QueryRow(`SELECT requests FROM ai_usage WHERE email = 'ana@example.com' AND site = 'blog' AND day = '2026-10-20'`).Scan(&requests)
+	if requests != 2 {
+		t.Errorf("requests = %d", requests)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -54,6 +55,14 @@ type Config struct {
 	MaxUploadBytes int64 // single uploaded file
 	UploadQuota    int64 // total uploaded bytes per site
 
+	// AI proxy; disabled unless AnthropicAPIKey is set.
+	AnthropicAPIKey   string
+	AnthropicBaseURL  string // optional, e.g. a corporate gateway
+	AIModels          []string
+	AIDefaultModel    string
+	AIDailyTokens     int64 // per user, input + output, across all sites
+	AIMaxOutputTokens int64 // per request
+
 	RateLimit float64 // API requests per second per user
 	RateBurst int
 }
@@ -93,6 +102,19 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if c.UploadQuota, err = envInt("EZE_UPLOAD_QUOTA_BYTES", 1<<30); err != nil {
+		return nil, err
+	}
+	c.AnthropicAPIKey = env("EZE_ANTHROPIC_API_KEY", "")
+	c.AnthropicBaseURL = env("EZE_ANTHROPIC_BASE_URL", "")
+	c.AIModels = splitList(env("EZE_AI_MODELS", "claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5"))
+	c.AIDefaultModel = env("EZE_AI_DEFAULT_MODEL", "claude-opus-5-5")
+	if !slices.Contains(c.AIModels, c.AIDefaultModel) {
+		return nil, fmt.Errorf("EZE_AI_DEFAULT_MODEL %q must be one of EZE_AI_MODELS", c.AIDefaultModel)
+	}
+	if c.AIDailyTokens, err = envInt("EZE_AI_DAILY_TOKENS", 1_000_000); err != nil {
+		return nil, err
+	}
+	if c.AIMaxOutputTokens, err = envInt("EZE_AI_MAX_OUTPUT_TOKENS", 16_000); err != nil {
 		return nil, err
 	}
 	rate, err := envInt("EZE_RATE_LIMIT", 20)
