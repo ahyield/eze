@@ -40,21 +40,40 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build -o eze ./cmd/eze
-      - name: start fake S3 and Google Cloud Storage servers
+      - name: start Garage (S3) and a fake Google Cloud Storage server
         run: |
-          go install github.com/johannesboyne/gofakes3/cmd/gofakes3@v1.2.0
+          cat > garage.toml <<TOML
+          metadata_dir = "/var/lib/garage/meta"
+          data_dir = "/var/lib/garage/data"
+          db_engine = "sqlite"
+          replication_factor = 1
+          rpc_bind_addr = "[::]:3901"
+          rpc_public_addr = "127.0.0.1:3901"
+          rpc_secret = "$(openssl rand -hex 32)"
+          [s3_api]
+          s3_region = "garage"
+          api_bind_addr = "[::]:3900"
+          TOML
+          docker run -d --name garage -p 127.0.0.1:3900:3900 -v "$PWD/garage.toml:/etc/garage.toml" dxflrs/garage:v2.4.1
+          sleep 3
+          garage() { docker exec garage /garage "$@"; }
+          node=$(garage status | awk '/NO ROLE ASSIGNED/ {print $1}' | head -1)
+          garage layout assign -z dc1 -c 1G "$node"
+          garage layout apply --version 1
+          garage bucket create eze
+          garage key create eze > key.txt
+          garage bucket allow --read --write --owner eze --key eze
+          echo "AWS_ACCESS_KEY_ID=$(awk '/Key ID/ {print $3}' key.txt)" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$(awk '/Secret key/ {print $3}' key.txt)" >> "$GITHUB_ENV"
+
           go install github.com/fsouza/fake-gcs-server@v1.56.1
           mkdir -p gcs/eze
-          gofakes3 -host 127.0.0.1:9000 -backend memory -initialbucket eze -quiet &
           fake-gcs-server -scheme http -host 127.0.0.1 -port 4443 -public-host 127.0.0.1:4443 -backend memory -data gcs &
           sleep 2
       - name: local disk
         run: scripts/storage-smoke.sh ./eze ''
-      - name: S3
-        env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-        run: scripts/storage-smoke.sh ./eze 's3://eze?endpoint=http://127.0.0.1:9000&region=us-east-1&use_path_style=true'
+      - name: S3 (Garage)
+        run: scripts/storage-smoke.sh ./eze 's3://eze?endpoint=http://127.0.0.1:3900&region=garage&use_path_style=true'
       - name: Google Cloud Storage
         env:
           STORAGE_EMULATOR_HOST: 127.0.0.1:4443

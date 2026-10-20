@@ -131,9 +131,13 @@ S3-compatible store or Google Cloud Storage instead, set `EZE_STORAGE`:
 ```sh
 EZE_STORAGE=s3://my-bucket?region=us-east-1
 EZE_STORAGE=gs://my-bucket
-# Cloudflare R2, MinIO, Backblaze B2 and other S3-compatible stores:
+# Cloudflare R2, Backblaze B2, Garage and other S3-compatible stores:
 EZE_STORAGE='s3://my-bucket?endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true'
 ```
+
+The `region` must be the one the store expects: `auto` for R2, the bucket's region for B2,
+and `garage` (or your `s3_region`) for Garage. A wrong one fails at startup with an
+authorization error.
 
 Add `&prefix=eze/` to keep eze's files in one folder of a shared bucket. Credentials come
 from the usual places: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, an instance role or
@@ -151,6 +155,50 @@ signing in, which is the whole point.
 
 `EZE_DATA_DIR` is still needed for `eze.db` and as scratch space for unpacking deploys.
 eze runs as a single server either way: the database and live rooms are on that machine.
+
+### Running your own: Garage
+
+To keep files on your own servers, [Garage](https://garagehq.deuxfleurs.fr) is a light,
+self-hosted S3-compatible store that fits eze well. A single node with Docker:
+
+```toml
+# /etc/garage.toml
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "<openssl rand -hex 32>"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+```
+
+```sh
+docker run -d --name garage --restart unless-stopped -p 127.0.0.1:3900:3900 \
+  -v /etc/garage.toml:/etc/garage.toml -v /var/lib/garage:/var/lib/garage dxflrs/garage:v2.4.1
+
+alias garage="docker exec garage /garage"
+garage status                                   # note the node ID
+garage layout assign -z dc1 -c 100G <node-id>
+garage layout apply --version 1
+garage bucket create eze
+garage key create eze                           # prints the key ID and secret
+garage bucket allow --read --write --owner eze --key eze
+```
+
+Then start eze with the key from `garage key create`:
+
+```sh
+AWS_ACCESS_KEY_ID=GK... AWS_SECRET_ACCESS_KEY=... \
+EZE_STORAGE='s3://eze?endpoint=http://127.0.0.1:3900&region=garage&use_path_style=true' \
+eze serve
+```
+
+Keep port 3900 private to the machine or network eze runs on. For more storage or
+redundancy, add nodes and raise `replication_factor`; see Garage's documentation.
 
 ### Moving an existing install
 
