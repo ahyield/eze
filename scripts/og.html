@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Source for site/og.png, the link preview image. Render it with scripts/og.sh. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../site/style.css">
+<style>
+  /* The image doesn't follow the viewer's theme: light by default, dark with ?dark. */
+  html:root { --paper: #fafaf9; --ink: #1c1917; --stone: #78716c; --pebble: #a8a29e; --line: #e7e5e4; --panel: #ffffff; --well: #f5f5f4; --blue: #2563eb; }
+  html.dark:root { --paper: #0c0a09; --ink: #f5f5f4; --stone: #a8a29e; --pebble: #78716c; --line: #292524; --panel: #1c1917; --well: #141210; --blue: #60a5fa; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body { background: var(--paper); position: relative; }
+  .meter b { animation: none; }
+
+  .card { position: absolute; inset: 0; padding: 64px 0 0 72px; }
+  .card .logo svg { height: 46px; }
+  .card h1 { font-size: 66px; line-height: 1.04; letter-spacing: -0.045em; font-weight: 750; margin: 56px 0 0; width: 560px; }
+  .card .foot { position: absolute; left: 72px; bottom: 60px; font-size: 24px; color: var(--stone); }
+  .card .foot b { color: var(--ink); font-weight: 650; }
+
+  .card .browser { position: absolute; left: 668px; top: 118px; width: 468px; box-shadow: 0 24px 60px -24px rgb(28 25 23 / 0.18); }
+  .card .address { font-size: 15px; }
+  .card .poll h2 { font-size: 24px; }
+  .card .choice { font-size: 17px; }
+</style>
+</head>
+<body>
+<script>if (location.search === '?dark') document.documentElement.className = 'dark'</script>
+<div class="card">
+  <div class="logo">
+    <svg viewBox="-2 -3 78 38" fill="none" stroke="currentColor" stroke-width="4" aria-hidden="true"><path d="M 2 16 H 22 A 10 10 0 1 0 19.66 22.43" transform="rotate(-35 12 16)"/><g transform="rotate(-7 47 26)"><path d="M 30 8 H 47 L 30 24 H 47"/><path d="M 51 16 H 71 A 10 10 0 1 0 68.66 22.43"/></g></svg>
+  </div>
+  <h1>Turn a folder into a private website for your team.</h1>
+  <div class="foot"><b>eze.page</b>&ensp;Open source and self-hosted</div>
+
+  <div class="browser">
+    <div class="bar">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <div class="address"><svg viewBox="0 0 12 12"><rect x="2" y="5" width="8" height="6" rx="1.5" fill="currentColor"/><path d="M4 5V3.5a2 2 0 0 1 4 0V5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>lunch-vote.eze.acme.com</div>
+    </div>
+    <div class="poll">
+      <h2>Where should we eat on Friday?</h2>
+      <div class="choice lead"><span>Ramen place on 5th</span><span class="count">9</span><div class="meter"><b style="--w: 64%"></b></div></div>
+      <div class="choice"><span>Tacos</span><span class="count">4</span><div class="meter"><b style="--w: 29%"></b></div></div>
+      <div class="choice"><span>Salad bar</span><span class="count">1</span><div class="meter"><b style="--w: 7%"></b></div></div>
+      <div class="here">
+        <div class="faces">
+          <span style="background:#2563eb">AN</span><span style="background:#0d9488">BO</span><span style="background:#9333ea">CY</span><span style="background:#ea580c">DE</span>
+        </div>
+        4 people from Acme are voting
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
