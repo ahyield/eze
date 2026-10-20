@@ -56,11 +56,13 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 		UploadQuota:     1 << 18,
 		RateLimit:       1000,
 		RateBurst:       1000,
+		TokenTTL:        24 * time.Hour,
 
 		AIModels:          []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"},
 		AIDefaultModel:    "claude-opus-5-5",
 		AIDailyTokens:     1_000_000,
 		AIMaxOutputTokens: 16_000,
+		AIMaxConcurrent:   3,
 	}
 	for _, m := range mutate {
 		m(cfg)
@@ -74,6 +76,12 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Site APIs need a deployed site. These exist on disk only, so the site list starts empty.
+	for _, name := range fixtureSites {
+		if _, _, err := ss.Deploy(name, bytes.NewReader(testutil.Files(t, map[string]string{"index.html": "fixture"}))); err != nil {
+			t.Fatal(err)
+		}
+	}
 	authn := &auth.Header{
 		EmailHeader:    "X-Email",
 		NameHeader:     "X-Name",
@@ -85,6 +93,8 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 	}
 	return &env{t: t, cfg: cfg, store: st, srv: srv}
 }
+
+var fixtureSites = []string{"blog", "other", "game", "a", "b"}
 
 type req struct {
 	method  string
@@ -124,7 +134,7 @@ func (e *env) deploy(site, as string, files map[string]string) *httptest.Respons
 func (e *env) bearer(email string) map[string]string {
 	e.t.Helper()
 	token, hash := auth.NewToken()
-	if err := e.store.CreateToken(context.Background(), hash, email, email, "test"); err != nil {
+	if err := e.store.CreateToken(context.Background(), hash, email, email, "test", time.Now().Add(time.Hour)); err != nil {
 		e.t.Fatal(err)
 	}
 	return map[string]string{"Authorization": "Bearer " + token}
@@ -220,11 +230,16 @@ func TestDeployListDelete(t *testing.T) {
 	if w := e.do(req{url: "https://blog.eze.test/", as: ana}); w.Code != 404 {
 		t.Errorf("deleted site = %d", w.Code)
 	}
-	if docs := decode[[]any](t, e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana})); len(docs) != 0 {
-		t.Errorf("deleted site still has docs: %v", docs)
+	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana}); w.Code != 404 {
+		t.Errorf("APIs of a deleted site = %d, want 404", w.Code)
 	}
 	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 404 {
 		t.Errorf("delete again = %d", w.Code)
+	}
+	// A new site under the same name starts empty.
+	e.deploy("blog", ana, map[string]string{"index.html": "new"})
+	if docs := decode[[]any](t, e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana})); len(docs) != 0 {
+		t.Errorf("recreated site inherited docs: %v", docs)
 	}
 }
 
@@ -269,7 +284,7 @@ func TestOwnerPolicy(t *testing.T) {
 func TestTokenAuth(t *testing.T) {
 	e := newEnv(t)
 	token, hash := auth.NewToken()
-	if err := e.store.CreateToken(context.Background(), hash, ana, "Ana", "cli"); err != nil {
+	if err := e.store.CreateToken(context.Background(), hash, ana, "Ana", "cli", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	// Tokens work from any address, e.g. a laptop going around the auth proxy.
@@ -293,17 +308,17 @@ func TestAPIRoutesRequireToken(t *testing.T) {
 	for _, r := range []req{
 		{url: "https://eze.test/_q/api/me", as: ana},
 		{url: "https://eze.test/_q/api/sites", as: ana},
-		{method: "PUT", url: "https://eze.test/_q/api/sites/blog", as: ana, body: bytes.NewReader(archive)},
-		{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: ana},
+		{method: "PUT", url: "https://eze.test/_q/api/sites/fresh", as: ana, body: bytes.NewReader(archive)},
+		{method: "DELETE", url: "https://eze.test/_q/api/sites/fresh", as: ana},
 	} {
 		if w := e.do(r); w.Code != 401 {
 			t.Errorf("%s %s with a proxy header = %d, want 401", r.method, r.url, w.Code)
 		}
 	}
-	if e.srv.sites.Exists("blog") {
+	if e.srv.sites.Exists("fresh") {
 		t.Fatal("header identity deployed through /_q/api/")
 	}
-	w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", headers: e.bearer(ana), body: bytes.NewReader(archive)})
+	w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/fresh", headers: e.bearer(ana), body: bytes.NewReader(archive)})
 	if w.Code != 200 {
 		t.Errorf("token deploy = %d %s", w.Code, w.Body)
 	}
@@ -425,6 +440,27 @@ func TestDocAPIValidation(t *testing.T) {
 		if w := e.do(tt.r); w.Code != tt.code {
 			t.Errorf("%s = %d, want %d (%s)", tt.name, w.Code, tt.code, w.Body)
 		}
+	}
+}
+
+func TestSiteAPIsNeedADeployedSite(t *testing.T) {
+	e := newEnv(t)
+	for _, r := range []req{
+		{url: "https://made-up.eze.test/_q/db/posts", as: ana},
+		{method: "POST", url: "https://made-up.eze.test/_q/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})},
+		{url: "https://made-up.eze.test/_q/files", as: ana},
+		{url: "https://made-up.eze.test/_q/me", as: ana},
+	} {
+		if w := e.do(r); w.Code != 404 || !strings.Contains(w.Body.String(), "deploy it first") {
+			t.Errorf("%s %s = %d %s", r.method, r.url, w.Code, w.Body)
+		}
+	}
+	// Signed-out visitors learn nothing about which sites exist.
+	if w := e.do(req{url: "https://made-up.eze.test/_q/db/posts"}); w.Code != 401 {
+		t.Errorf("anonymous = %d", w.Code)
+	}
+	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana}); w.Code != 200 {
+		t.Errorf("deployed site = %d", w.Code)
 	}
 }
 
@@ -669,5 +705,71 @@ func drain(ch chan []byte) (n int, open bool) {
 		default:
 			return n, true
 		}
+	}
+}
+
+func TestTokenManagement(t *testing.T) {
+	e := newEnv(t, func(c *config.Config) { c.TokenTTL = 90 * 24 * time.Hour })
+	laptop := e.bearer(ana)
+	desktop := e.bearer(ana)
+	bos := e.bearer(bo)
+
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/tokens", headers: laptop}))
+	if len(list) != 2 {
+		t.Fatalf("list = %v", list)
+	}
+	var current, other string
+	for _, tok := range list {
+		if tok["current"] == true {
+			current = tok["id"].(string)
+		} else {
+			other = tok["id"].(string)
+		}
+	}
+	if current == "" || other == "" {
+		t.Fatalf("current token not marked: %v", list)
+	}
+
+	// Revoke by id: only your own.
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/" + other, headers: bos}); w.Code != 404 {
+		t.Errorf("revoking someone else's token by id = %d", w.Code)
+	}
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/" + other, headers: laptop}); w.Code != 204 {
+		t.Errorf("revoke = %d %s", w.Code, w.Body)
+	}
+	if w := e.do(req{url: "https://eze.test/_q/api/me", headers: desktop}); w.Code != 401 {
+		t.Errorf("revoked token still works: %d", w.Code)
+	}
+
+	// Logout revokes the token making the request.
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/current", headers: laptop}); w.Code != 204 {
+		t.Errorf("logout = %d", w.Code)
+	}
+	if w := e.do(req{url: "https://eze.test/_q/api/me", headers: laptop}); w.Code != 401 {
+		t.Errorf("token works after logout: %d", w.Code)
+	}
+
+	// Offboarding: anyone can revoke all of someone's tokens.
+	e.bearer(ana)
+	w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/users/ANA@example.com/tokens", headers: bos})
+	if res := decode[map[string]any](t, w); res["revoked"] != 1.0 {
+		t.Errorf("offboard = %v", res)
+	}
+	// Token routes are /_q/api/: proxy headers don't count there.
+	if w := e.do(req{url: "https://eze.test/_q/api/tokens", as: ana}); w.Code != 401 {
+		t.Errorf("token list with a proxy header = %d", w.Code)
+	}
+}
+
+func TestCLITokensExpire(t *testing.T) {
+	e := newEnv(t, func(c *config.Config) { c.TokenTTL = 30 * 24 * time.Hour })
+	form := url.Values{"port": {"50123"}, "state": {"abcdefghijklmnopqrstuvwxyz"}}.Encode()
+	w := e.do(req{method: "POST", url: "https://eze.test/_q/cli/authorize", as: ana, body: strings.NewReader(form),
+		headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"}})
+	token := regexp.MustCompile(`name="token" value="(eze_[A-Za-z0-9_-]+)"`).FindStringSubmatch(w.Body.String())[1]
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/tokens", headers: map[string]string{"Authorization": "Bearer " + token}}))
+	expires, _ := time.Parse(time.RFC3339Nano, list[0]["expires_at"].(string))
+	if d := time.Until(expires); d < 29*24*time.Hour || d > 31*24*time.Hour {
+		t.Errorf("CLI token expires in %v, want about 30 days", d)
 	}
 }

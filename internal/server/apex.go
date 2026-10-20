@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ahyield/eze/internal/auth"
 	"github.com/ahyield/eze/internal/config"
@@ -161,7 +163,7 @@ func (s *Server) handleCLIAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.UserFrom(r.Context())
 	token, hash := auth.NewToken()
-	if err := s.store.CreateToken(r.Context(), hash, user.Email, user.Name, "cli"); err != nil {
+	if err := s.store.CreateToken(r.Context(), hash, user.Email, user.Name, "cli", time.Now().Add(s.cfg.TokenTTL)); err != nil {
 		s.internalErr(w, r, err)
 		return
 	}
@@ -171,4 +173,65 @@ func (s *Server) handleCLIAuthorize(w http.ResponseWriter, r *http.Request) {
 		"Token":    token,
 		"State":    state,
 	})
+}
+
+// API tokens. Listing and revoking need a token (these are /_q/api/ routes), so they work
+// from the CLI. Anyone may revoke anyone's tokens: offboarding someone shouldn't wait for an
+// admin, and under eze's trust model the worst case is making a colleague run eze login.
+
+type tokenResponse struct {
+	store.Token
+	Current bool `json:"current"`
+}
+
+func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	tokens, err := s.store.ListTokens(r.Context(), user.Email)
+	if err != nil {
+		s.internalErr(w, r, err)
+		return
+	}
+	out := make([]tokenResponse, len(tokens))
+	for i, t := range tokens {
+		out[i] = tokenResponse{t, user.TokenHash != "" && t.ID == store.TokenID(user.TokenHash)}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleRevokeCurrentToken(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	if user.TokenHash == "" {
+		writeErr(w, http.StatusBadRequest, "this request was not made with an API token")
+		return
+	}
+	if err := s.store.RevokeToken(r.Context(), user.Email, store.TokenID(user.TokenHash)); err != nil && !errors.Is(err, store.ErrNotFound) {
+		s.internalErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFrom(r.Context())
+	err := s.store.RevokeToken(r.Context(), user.Email, r.PathValue("id"))
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "you have no token with that id")
+		return
+	}
+	if err != nil {
+		s.internalErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRevokeUserTokens(w http.ResponseWriter, r *http.Request) {
+	email := strings.ToLower(r.PathValue("email"))
+	n, err := s.store.RevokeTokensFor(r.Context(), email)
+	if err != nil {
+		s.internalErr(w, r, err)
+		return
+	}
+	slog.Info("tokens revoked", "for", email, "by", auth.UserFrom(r.Context()).Email, "count", n)
+	writeJSON(w, http.StatusOK, map[string]int64{"revoked": n})
 }

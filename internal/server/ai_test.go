@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -221,9 +222,10 @@ func TestAIStreamErrorMidway(t *testing.T) {
 	if len(events) != 2 || events[0][1] != `{"text":"partial"}` || events[1][0] != "error" {
 		t.Fatalf("events = %v", events)
 	}
-	// The tokens read before the failure still count.
-	if n, _ := e.store.AITokensUsed(context.Background(), ana, time.Now()); n != 41 {
-		t.Errorf("recorded usage = %d, want 41", n)
+	// Final usage never arrived, so the whole reservation is charged: input estimate plus max_tokens.
+	want := estimateInputTokens(&chatRequest{Messages: []ai.Message{{Role: "user", Content: "hi"}}}) + e.cfg.AIMaxOutputTokens
+	if n, _ := e.store.AITokensUsed(context.Background(), ana, time.Now()); n != want {
+		t.Errorf("recorded usage = %d, want the reservation %d", n, want)
 	}
 }
 
@@ -284,7 +286,7 @@ func TestAIValidation(t *testing.T) {
 
 func TestAIBudget(t *testing.T) {
 	e, fake := aiEnv(t, streamReply("claude-opus-5-5", []string{"x"}, "end_turn", 100, 20),
-		func(c *config.Config) { c.AIDailyTokens = 100 })
+		func(c *config.Config) { c.AIDailyTokens = 100; c.AIMaxOutputTokens = 30 })
 	if w := chat(e, hello); w.Code != 200 {
 		t.Fatalf("first = %d", w.Code)
 	}
@@ -364,4 +366,127 @@ func TestAIClientDisconnectCancelsUpstream(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Error("usage of an abandoned request was not recorded")
+}
+
+// blockingReply streams the start of a reply, then holds the request open until release is closed.
+func blockingReply(started chan<- struct{}, release <-chan struct{}) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		sseEvent(w, "message_start", `{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":1}}}`)
+		started <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		sseEvent(w, "message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":2}}`)
+		sseEvent(w, "message_stop", `{"type":"message_stop"}`)
+	}
+}
+
+// refusedOrStarted makes a call that should be refused. If it reaches the provider instead,
+// it fails the test at once (the provider would hold it open) and returns nil.
+func refusedOrStarted(t *testing.T, e *env, started <-chan struct{}) *httptest.ResponseRecorder {
+	t.Helper()
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- chat(e, hello) }()
+	select {
+	case w := <-done:
+		return w
+	case <-started:
+		t.Error("the call reached the AI provider; it should have been refused")
+		return nil
+	}
+}
+
+func TestAIConcurrencyCap(t *testing.T) {
+	started := make(chan struct{}, 10)
+	release := make(chan struct{})
+	e, _ := aiEnv(t, blockingReply(started, release), func(c *config.Config) { c.AIMaxConcurrent = 2 })
+	var wg sync.WaitGroup
+	codes := make(chan int, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() { defer wg.Done(); codes <- chat(e, hello).Code }()
+	}
+	<-started
+	<-started
+	if w := refusedOrStarted(t, e, started); w != nil && (w.Code != 429 || !strings.Contains(w.Body.String(), "already have 2")) {
+		t.Errorf("third concurrent call = %d %s", w.Code, w.Body)
+	}
+	close(release)
+	wg.Wait()
+	close(codes)
+	for c := range codes {
+		if c != 200 {
+			t.Errorf("held call = %d", c)
+		}
+	}
+	if w := chat(e, hello); w.Code != 200 {
+		t.Errorf("after the others finished = %d", w.Code)
+	}
+}
+
+func TestAIParallelCallsCantOverspend(t *testing.T) {
+	started := make(chan struct{}, 10)
+	release := make(chan struct{})
+	// Each call reserves its input estimate plus max_tokens (1000); the budget fits two.
+	e, _ := aiEnv(t, blockingReply(started, release), func(c *config.Config) {
+		c.AIDailyTokens = 2300
+		c.AIMaxOutputTokens = 1000
+		c.AIMaxConcurrent = 10
+	})
+	var wg sync.WaitGroup
+	results := make(chan int, 5)
+	for range 2 {
+		wg.Add(1)
+		go func() { defer wg.Done(); results <- chat(e, hello).Code }()
+	}
+	<-started
+	<-started
+	if w := refusedOrStarted(t, e, started); w != nil && (w.Code != 429 || !strings.Contains(w.Body.String(), "still running")) {
+		t.Errorf("third call while two are reserved = %d %s", w.Code, w.Body)
+	}
+	close(release)
+	wg.Wait()
+}
+
+func TestAIReservationRefusesHugePrompts(t *testing.T) {
+	e, fake := aiEnv(t, streamReply("claude-opus-5-5", []string{"x"}, "end_turn", 1, 1),
+		func(c *config.Config) { c.AIDailyTokens = 10_000; c.AIMaxOutputTokens = 1000 })
+	big := strings.Repeat("word ", 20_000) // about 33k estimated tokens
+	w := chat(e, map[string]any{"messages": []map[string]string{{"role": "user", "content": big}}})
+	if w.Code != 429 || !strings.Contains(w.Body.String(), "could use up to") {
+		t.Errorf("huge prompt = %d %s", w.Code, w.Body)
+	}
+	if body, _ := fake.last(); body != nil {
+		t.Error("an over-budget prompt reached the provider")
+	}
+	if w := chat(e, hello); w.Code != 200 {
+		t.Errorf("small prompt = %d", w.Code)
+	}
+}
+
+func TestLedger(t *testing.T) {
+	l := newAILedger()
+	if err := l.reserve("a", 0, 100, 60, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.reserve("a", 0, 100, 50, 2); !errors.Is(err, errAIBudget) {
+		t.Errorf("over reservation = %v", err)
+	}
+	if err := l.reserve("a", 0, 100, 40, 2); err != nil {
+		t.Errorf("exactly at budget = %v", err)
+	}
+	if err := l.reserve("a", 0, 1000, 1, 2); !errors.Is(err, errAIBusy) {
+		t.Errorf("third in flight = %v", err)
+	}
+	if err := l.reserve("b", 0, 100, 100, 2); err != nil {
+		t.Errorf("other user = %v", err)
+	}
+	l.release("a", 60)
+	l.release("a", 40)
+	if len(l.inflight) != 1 || len(l.reserved) != 1 {
+		t.Errorf("ledger not cleaned up: %v %v", l.inflight, l.reserved)
+	}
 }

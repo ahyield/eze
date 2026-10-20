@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/ahyield/eze/internal/ai"
@@ -70,6 +71,71 @@ func (s *Server) validateChat(req *chatRequest) string {
 	return ""
 }
 
+// estimateInputTokens over-estimates the prompt's size: roughly a token per 3 bytes, which
+// covers English (about 4 bytes a token) and most other scripts, plus per-message overhead.
+func estimateInputTokens(req *chatRequest) int64 {
+	n := int64(len(req.System))
+	for _, m := range req.Messages {
+		n += int64(len(m.Content)) + 30
+	}
+	return n/3 + 50
+}
+
+var (
+	errAIBusy   = errors.New("too many AI calls in flight")
+	errAIBudget = errors.New("over budget")
+)
+
+// aiLedger tracks each person's AI calls in flight and the tokens reserved for them.
+type aiLedger struct {
+	mu       sync.Mutex
+	inflight map[string]int
+	reserved map[string]int64
+}
+
+func newAILedger() *aiLedger {
+	return &aiLedger{inflight: map[string]int{}, reserved: map[string]int64{}}
+}
+
+func (l *aiLedger) reserve(email string, used, limit, amount int64, maxConcurrent int) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inflight[email] >= maxConcurrent {
+		return errAIBusy
+	}
+	if used+l.reserved[email]+amount > limit {
+		return errAIBudget
+	}
+	l.inflight[email]++
+	l.reserved[email] += amount
+	return nil
+}
+
+func (l *aiLedger) release(email string, amount int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.inflight[email]--
+	l.reserved[email] -= amount
+	if l.inflight[email] == 0 {
+		delete(l.inflight, email)
+		delete(l.reserved, email)
+	}
+}
+
+func (s *Server) budgetMessage(err error, used, reservation int64, now time.Time) string {
+	resets := nextUTCMidnight(now).Format(time.RFC3339)
+	switch {
+	case errors.Is(err, errAIBusy):
+		return fmt.Sprintf("you already have %d AI requests running; wait for one to finish", s.cfg.AIMaxConcurrent)
+	case used >= s.cfg.AIDailyTokens:
+		return fmt.Sprintf("daily AI budget of %d tokens used up; it resets at %s", s.cfg.AIDailyTokens, resets)
+	default:
+		return fmt.Sprintf("this request could use up to %d tokens, more than is left of today's budget "+
+			"(%d of %d used, including requests still running); send less or lower max_tokens. It resets at %s",
+			reservation, used, s.cfg.AIDailyTokens, resets)
+	}
+}
+
 func nextUTCMidnight(t time.Time) time.Time {
 	y, m, d := t.UTC().Date()
 	return time.Date(y, m, d+1, 0, 0, 0, 0, time.UTC)
@@ -120,12 +186,15 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, r, err)
 		return
 	}
-	// The check is before the call, so one request can run past the budget; the next one is refused.
-	if used >= s.cfg.AIDailyTokens {
-		writeErr(w, http.StatusTooManyRequests, fmt.Sprintf("daily AI budget of %d tokens used up; it resets at %s",
-			s.cfg.AIDailyTokens, nextUTCMidnight(now).Format(time.RFC3339)))
+	// Reserve the most this call could cost before making it, so parallel requests can't
+	// each pass the budget check and overspend together.
+	estimate := estimateInputTokens(&req)
+	reservation := estimate + req.MaxTokens
+	if err := s.aiLedger.reserve(user.Email, used, s.cfg.AIDailyTokens, reservation, s.cfg.AIMaxConcurrent); err != nil {
+		writeErr(w, http.StatusTooManyRequests, s.budgetMessage(err, used, reservation, now))
 		return
 	}
+	defer s.aiLedger.release(user.Email, reservation)
 
 	aiReq := ai.Request{Model: req.Model, System: req.System, Messages: req.Messages, MaxTokens: req.MaxTokens, Effort: req.Effort}
 	// The request context is cancelled when the browser goes away, which stops the upstream
@@ -142,13 +211,20 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if res != nil && res.Usage.Total() > 0 {
-		// Record even when the request failed or was abandoned: the tokens were spent.
-		if rerr := s.store.RecordAIUsage(context.WithoutCancel(r.Context()), user.Email, site, now, res.Usage.InputTokens, res.Usage.OutputTokens); rerr != nil {
-			slog.Error("recording AI usage", "err", rerr)
-		}
-		slog.Info("ai", "site", site, "by", user.Email, "model", res.Model, "in", res.Usage.InputTokens, "out", res.Usage.OutputTokens, "stop", res.StopReason)
+	if res == nil || res.Usage.Total() == 0 {
+		return // the provider never started the reply, so nothing was billed
 	}
+	charged := res.Usage
+	if !res.Complete {
+		// Stopped early, by the browser or a failure: final usage never arrived, and output
+		// (including thinking that is never streamed) may have run past what we saw.
+		// Charge the reservation so an abort can't be used to spend for free.
+		charged = ai.Usage{InputTokens: max(charged.InputTokens, estimate), OutputTokens: req.MaxTokens}
+	}
+	if rerr := s.store.RecordAIUsage(context.WithoutCancel(r.Context()), user.Email, site, now, charged.InputTokens, charged.OutputTokens); rerr != nil {
+		slog.Error("recording AI usage", "err", rerr)
+	}
+	slog.Info("ai", "site", site, "by", user.Email, "model", res.Model, "in", charged.InputTokens, "out", charged.OutputTokens, "stop", res.StopReason, "complete", res.Complete)
 }
 
 func (s *Server) writeAIErr(w http.ResponseWriter, r *http.Request, err error) {

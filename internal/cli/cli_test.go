@@ -226,3 +226,55 @@ func TestClientErrors(t *testing.T) {
 		t.Errorf("plain error = %v", err)
 	}
 }
+
+func TestTokensAndLogout(t *testing.T) {
+	var calls []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.EscapedPath())
+		switch {
+		case r.Method == "GET" && r.URL.Path == "/_q/api/tokens":
+			w.Write([]byte(`[{"id":"abc123def456","label":"cli","created_at":"2026-10-01T00:00:00Z","expires_at":"2026-12-30T00:00:00Z","current":true}]`))
+		case r.Method == "DELETE" && r.URL.Path == "/_q/api/users/bo@example.com/tokens":
+			w.Write([]byte(`{"revoked":2}`))
+		case r.Method == "DELETE":
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer ts.Close()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("EZE_SERVER", "")
+	t.Setenv("EZE_TOKEN", "")
+	if _, err := saveConfig(&Config{Server: ts.URL, Token: "eze_t"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Tokens(nil); err != nil {
+		t.Errorf("tokens ls: %v", err)
+	}
+	if err := Tokens([]string{"revoke", "abc123def456"}); err != nil {
+		t.Errorf("revoke id: %v", err)
+	}
+	if err := Tokens([]string{"revoke", "--user", "bo@example.com"}); err != nil {
+		t.Errorf("revoke user: %v", err)
+	}
+	if err := Tokens([]string{"revoke"}); err == nil {
+		t.Error("revoke without an id or --user should fail")
+	}
+	if err := Tokens([]string{"revoke", "x", "--user", "bo@example.com"}); err == nil {
+		t.Error("revoke with both an id and --user should fail")
+	}
+	if err := Logout(nil); err != nil {
+		t.Errorf("logout: %v", err)
+	}
+	p, _ := configPath()
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Error("logout kept the saved token")
+	}
+	want := []string{"GET /_q/api/tokens", "DELETE /_q/api/tokens/abc123def456", "DELETE /_q/api/users/bo@example.com/tokens", "DELETE /_q/api/tokens/current"}
+	if strings.Join(calls, ",") != strings.Join(want, ",") {
+		t.Errorf("calls = %v", calls)
+	}
+}

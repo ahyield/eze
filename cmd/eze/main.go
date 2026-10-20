@@ -29,6 +29,9 @@ Usage:
   eze ls                        list all sites
   eze rm <site> [--yes]         delete a site, its files and its data
   eze whoami                    show the signed-in user
+  eze tokens [revoke <id>]      list or revoke your API tokens
+  eze tokens revoke --user <email>  revoke all of someone's tokens (offboarding)
+  eze logout                    revoke this computer's token
   eze serve                     run the server (configured with EZE_* env vars)
 `
 
@@ -44,6 +47,8 @@ func main() {
 		"ls":     cli.List,
 		"rm":     cli.Remove,
 		"whoami": cli.Whoami,
+		"tokens": cli.Tokens,
+		"logout": cli.Logout,
 		"serve":  func([]string) error { return serve() },
 	}
 	cmd, ok := cmds[os.Args[1]]

@@ -2,7 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,20 +82,97 @@ func TestListAndDeleteSites(t *testing.T) {
 
 func TestTokens(t *testing.T) {
 	s := open(t)
+	hour := time.Now().Add(time.Hour)
 	if _, err := s.LookupToken(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing token = %v", err)
 	}
-	if err := s.CreateToken(ctx, "hash1", "ana@example.com", "Ana", "cli"); err != nil {
-		t.Fatal(err)
-	}
-	owner, err := s.LookupToken(ctx, "hash1")
+	hash1 := strings.Repeat("a", 64)
+	hash2 := strings.Repeat("b", 64)
+	expired := strings.Repeat("c", 64)
+	s.CreateToken(ctx, hash1, "ana@example.com", "Ana", "cli", hour)
+	s.CreateToken(ctx, hash2, "ana@example.com", "Ana", "laptop", hour)
+	s.CreateToken(ctx, expired, "ana@example.com", "Ana", "old", time.Now().Add(-time.Second))
+	s.CreateToken(ctx, strings.Repeat("d", 64), "bo@example.com", "Bo", "cli", hour)
+
+	owner, err := s.LookupToken(ctx, hash1)
 	if err != nil || owner.Email != "ana@example.com" || owner.Name != "Ana" {
 		t.Errorf("lookup = %+v, %v", owner, err)
 	}
-	var used *int64
-	s.db.QueryRow(`SELECT last_used_at FROM tokens WHERE hash = 'hash1'`).Scan(&used)
-	if used == nil {
-		t.Error("last_used_at not recorded")
+	if _, err := s.LookupToken(ctx, expired); !errors.Is(err, ErrNotFound) {
+		t.Errorf("expired token accepted: %v", err)
+	}
+
+	list, err := s.ListTokens(ctx, "ana@example.com")
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list = %+v, %v (expired tokens are hidden)", list, err)
+	}
+	for _, tok := range list {
+		if len(tok.ID) != 12 || !strings.Contains(hash1+hash2, tok.ID) {
+			t.Errorf("token id %q is not a short hash prefix", tok.ID)
+		}
+		if tok.ID == TokenID(hash1) && tok.LastUsedAt == nil {
+			t.Error("last use not recorded")
+		}
+	}
+
+	if err := s.RevokeToken(ctx, "bo@example.com", TokenID(hash1)); !errors.Is(err, ErrNotFound) {
+		t.Errorf("revoking someone else's token by id = %v", err)
+	}
+	if err := s.RevokeToken(ctx, "ana@example.com", "a"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("revoking by a too-short prefix = %v", err)
+	}
+	if err := s.RevokeToken(ctx, "ana@example.com", TokenID(hash1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LookupToken(ctx, hash1); !errors.Is(err, ErrNotFound) {
+		t.Error("revoked token still works")
+	}
+	if n, err := s.RevokeTokensFor(ctx, "ana@example.com"); err != nil || n != 2 {
+		t.Errorf("revoke all = %d, %v", n, err)
+	}
+	if _, err := s.LookupToken(ctx, hash2); !errors.Is(err, ErrNotFound) {
+		t.Error("token survived revoke all")
+	}
+	if _, err := s.LookupToken(ctx, strings.Repeat("d", 64)); err != nil {
+		t.Error("revoking ana's tokens affected bo's")
+	}
+}
+
+func TestTokenExpiryMigration(t *testing.T) {
+	// A database from before tokens expired.
+	dir := t.TempDir()
+	old, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "eze.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := time.Now().Add(-100 * 24 * time.Hour).UnixMilli()
+	recent := time.Now().Add(-time.Hour).UnixMilli()
+	for _, stmt := range []string{
+		`CREATE TABLE tokens (hash TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, label TEXT NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER)`,
+		fmt.Sprintf(`INSERT INTO tokens VALUES ('%s', 'a@example.com', 'A', 'cli', %d, NULL)`, strings.Repeat("a", 64), created),
+		fmt.Sprintf(`INSERT INTO tokens VALUES ('%s', 'a@example.com', 'A', 'cli', %d, NULL)`, strings.Repeat("b", 64), recent),
+	} {
+		if _, err := old.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Close()
+
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.LookupToken(ctx, strings.Repeat("a", 64)); !errors.Is(err, ErrNotFound) {
+		t.Error("a 100-day-old token should have expired in the migration")
+	}
+	if _, err := s.LookupToken(ctx, strings.Repeat("b", 64)); err != nil {
+		t.Errorf("a recent token should still work: %v", err)
+	}
+	// Reopening must not migrate twice.
+	s.Close()
+	if s, err = Open(dir); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -143,7 +143,10 @@ const u = await eze.ai.usage(); // { enabled, used, limit, resets_at, models, de
 
 Messages are text only. Stream (`onText`) anything a person waits on. Check `res.stop_reason`:
 `'refusal'` means the model declined, `'max_tokens'` means the reply was cut off. A 429 error
-means the person's daily budget is used up; show the message rather than retrying.
+means the person's budget can't cover the request, or they already have 3 AI calls running;
+show the error message rather than retrying in a loop. Each call reserves its prompt size plus
+`maxTokens` from the daily budget while it runs, so set `maxTokens` to what you need. Stopping
+a reply early (`signal`) still counts as a full-length reply.
 For structured output, ask for JSON in the prompt and `JSON.parse` the text defensively.
 
 ### Errors

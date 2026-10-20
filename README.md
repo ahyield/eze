@@ -115,6 +115,8 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_AI_DEFAULT_MODEL` | `claude-opus-5-5` | Used when a page doesn't pick one. |
 | `EZE_AI_DAILY_TOKENS` | 1000000 | Per-person daily budget (input + output), across all sites. Resets at 00:00 UTC. |
 | `EZE_AI_MAX_OUTPUT_TOKENS` | 16000 | Cap on a single reply. |
+| `EZE_AI_MAX_CONCURRENT` | 3 | AI calls one person may have running at once. |
+| `EZE_TOKEN_TTL_DAYS` | 90 | Lifetime of CLI API tokens. |
 | `EZE_RATE_LIMIT`, `EZE_RATE_BURST` | 20/s, 60 | Per-user API rate limit. |
 
 ### Try it locally
@@ -141,17 +143,29 @@ eze deploy [dir] [--site name]  upload a folder; replaces the site atomically
 eze ls                          list all sites
 eze rm <site> [--yes]           delete a site, its files and its data
 eze whoami                      show the signed-in user
+eze tokens [revoke <id>]        list or revoke your API tokens
+eze tokens revoke --user <email>  revoke all of someone's tokens, e.g. when they leave
+eze logout                      revoke this computer's token
 ```
 
 The site name comes from `--site`, then `eze.json`, then the directory name. Hidden files,
 `node_modules`, `AGENTS.md`, `CLAUDE.md` and `eze.json` are never uploaded. In CI, set
 `EZE_SERVER` and `EZE_TOKEN` instead of running `eze login`.
 
+API tokens expire after `EZE_TOKEN_TTL_DAYS` (90 by default). When someone leaves, removing
+them from your identity provider stops new sign-ins; also run
+`eze tokens revoke --user them@example.com` so their CLI stops working right away.
+
 ## AI spend
 
-`eze.ai` makes every signed-in person a potential API spender, so it is bounded three ways:
-a per-person daily token budget, a per-reply output cap, and the general per-person rate limit.
-Upstream calls are cancelled when the browser goes away. Usage is recorded per person, per site,
+`eze.ai` makes every signed-in person a potential API spender, so it is bounded several ways:
+
+- A per-person daily token budget. Before each call, eze reserves its worst case (the prompt
+  size plus `max_tokens`) against what is left, so parallel calls can't overspend together.
+- At most `EZE_AI_MAX_CONCURRENT` calls in flight per person, and a per-reply output cap.
+- A reply stopped early is charged its full reservation: the provider's final usage never
+  arrives, and thinking tokens are billed without being streamed.
+- Upstream calls are cancelled when the browser goes away, and the general rate limit applies. Usage is recorded per person, per site,
 per day in the `ai_usage` table of `eze.db`, so you can see where tokens went:
 
 ```sh

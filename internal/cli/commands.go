@@ -184,3 +184,88 @@ func Remove(args []string) error {
 	fmt.Println("Deleted", name)
 	return nil
 }
+
+type tokenInfo struct {
+	ID         string     `json:"id"`
+	Label      string     `json:"label"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	Current    bool       `json:"current"`
+}
+
+// Tokens lists or revokes API tokens: `eze tokens`, `eze tokens revoke <id>`,
+// `eze tokens revoke --user <email>`.
+func Tokens(args []string) error {
+	c, err := newClient()
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 || args[0] == "ls" {
+		var tokens []tokenInfo
+		if err := c.do("GET", "/_q/api/tokens", nil, "", &tokens); err != nil {
+			return err
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "ID\tLABEL\tCREATED\tLAST USED\tEXPIRES")
+		for _, t := range tokens {
+			used := "never"
+			if t.LastUsedAt != nil {
+				used = t.LastUsedAt.Local().Format("2006-01-02")
+			}
+			id := t.ID
+			if t.Current {
+				id += " (this one)"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", id, t.Label, t.CreatedAt.Local().Format("2006-01-02"), used, t.ExpiresAt.Local().Format("2006-01-02"))
+		}
+		return tw.Flush()
+	}
+	if args[0] != "revoke" {
+		return errors.New("usage: eze tokens [ls] | eze tokens revoke <id> | eze tokens revoke --user <email>")
+	}
+	fs := flag.NewFlagSet("tokens revoke", flag.ContinueOnError)
+	userFlag := fs.String("user", "", "revoke every token of this person, e.g. when they leave")
+	pos, err := parseFlags(fs, args[1:])
+	if err != nil {
+		return err
+	}
+	switch {
+	case *userFlag != "" && len(pos) == 0:
+		var res struct {
+			Revoked int `json:"revoked"`
+		}
+		if err := c.do("DELETE", "/_q/api/users/"+url.PathEscape(*userFlag)+"/tokens", nil, "", &res); err != nil {
+			return err
+		}
+		fmt.Printf("Revoked %d token(s) of %s\n", res.Revoked, *userFlag)
+	case *userFlag == "" && len(pos) == 1:
+		if err := c.do("DELETE", "/_q/api/tokens/"+url.PathEscape(pos[0]), nil, "", nil); err != nil {
+			return err
+		}
+		fmt.Println("Revoked", pos[0])
+	default:
+		return errors.New("usage: eze tokens revoke <id> | eze tokens revoke --user <email>")
+	}
+	return nil
+}
+
+// Logout revokes the CLI's token on the server and forgets it locally.
+func Logout(args []string) error {
+	c, err := newClient()
+	if err != nil {
+		return err
+	}
+	if err := c.do("DELETE", "/_q/api/tokens/current", nil, "", nil); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: could not revoke the token on the server:", err)
+	}
+	p, err := configPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	fmt.Println("Logged out of", c.cfg.Server)
+	return nil
+}

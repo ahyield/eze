@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -63,6 +64,9 @@ type Config struct {
 	AIDefaultModel    string
 	AIDailyTokens     int64 // per user, input + output, across all sites
 	AIMaxOutputTokens int64 // per request
+	AIMaxConcurrent   int   // AI calls in flight per user
+
+	TokenTTL time.Duration // lifetime of CLI API tokens
 
 	RateLimit float64 // API requests per second per user
 	RateBurst int
@@ -118,6 +122,16 @@ func Load() (*Config, error) {
 	if c.AIMaxOutputTokens, err = envInt("EZE_AI_MAX_OUTPUT_TOKENS", 16_000); err != nil {
 		return nil, err
 	}
+	maxConcurrent, err := envInt("EZE_AI_MAX_CONCURRENT", 3)
+	if err != nil {
+		return nil, err
+	}
+	c.AIMaxConcurrent = int(maxConcurrent)
+	ttlDays, err := envInt("EZE_TOKEN_TTL_DAYS", 90)
+	if err != nil {
+		return nil, err
+	}
+	c.TokenTTL = time.Duration(ttlDays) * 24 * time.Hour
 	rate, err := envInt("EZE_RATE_LIMIT", 20)
 	if err != nil {
 		return nil, err

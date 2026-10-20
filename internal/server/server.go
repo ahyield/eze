@@ -19,15 +19,16 @@ import (
 )
 
 type Server struct {
-	cfg     *config.Config
-	authn   auth.Authenticator
-	store   *store.Store
-	sites   *sites.Store
-	uploads *uploads.Store
-	hub     *hub
-	rooms   *rooms
-	ai      ai.Provider // nil when AI is not configured
-	limiter *rateLimiter
+	cfg      *config.Config
+	authn    auth.Authenticator
+	store    *store.Store
+	sites    *sites.Store
+	uploads  *uploads.Store
+	hub      *hub
+	rooms    *rooms
+	ai       ai.Provider // nil when AI is not configured
+	aiLedger *aiLedger
+	limiter  *rateLimiter
 
 	public *http.ServeMux // apex routes reachable without a user (login flow)
 	apex   *http.ServeMux
@@ -40,17 +41,18 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 		return nil, err
 	}
 	s := &Server{
-		cfg:     cfg,
-		authn:   authn,
-		store:   st,
-		sites:   ss,
-		uploads: up,
-		hub:     newHub(),
-		rooms:   newRooms(),
-		limiter: newRateLimiter(cfg.RateLimit, cfg.RateBurst),
-		public:  http.NewServeMux(),
-		apex:    http.NewServeMux(),
-		site:    http.NewServeMux(),
+		cfg:      cfg,
+		authn:    authn,
+		store:    st,
+		sites:    ss,
+		uploads:  up,
+		hub:      newHub(),
+		rooms:    newRooms(),
+		aiLedger: newAILedger(),
+		limiter:  newRateLimiter(cfg.RateLimit, cfg.RateBurst),
+		public:   http.NewServeMux(),
+		apex:     http.NewServeMux(),
+		site:     http.NewServeMux(),
 	}
 	if cfg.AnthropicAPIKey != "" {
 		s.ai = ai.NewAnthropic(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL)
@@ -69,6 +71,10 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	s.apex.HandleFunc("GET /_q/api/sites", s.handleListSites)
 	s.apex.HandleFunc("PUT /_q/api/sites/{name}", s.handleDeploy)
 	s.apex.HandleFunc("DELETE /_q/api/sites/{name}", s.handleDeleteSite)
+	s.apex.HandleFunc("GET /_q/api/tokens", s.handleListTokens)
+	s.apex.HandleFunc("DELETE /_q/api/tokens/current", s.handleRevokeCurrentToken)
+	s.apex.HandleFunc("DELETE /_q/api/tokens/{id}", s.handleRevokeToken)
+	s.apex.HandleFunc("DELETE /_q/api/users/{email}/tokens", s.handleRevokeUserTokens)
 	// The dashboard's own routes: behind normal sign-in, unlike /_q/api/ (see identify).
 	s.apex.HandleFunc("PUT /_q/sites/{name}", s.handleDeploy)
 	s.apex.HandleFunc("DELETE /_q/sites/{name}", s.handleDeleteSite)
@@ -142,6 +148,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusTooManyRequests, "rate limit exceeded, slow down")
 		return
 	}
+	// Site APIs only exist for deployed sites; otherwise any made-up name would be a free
+	// database and upload quota.
+	if site := siteFrom(r.Context()); site != "" && isAPI(r.URL.Path) && !s.sites.Exists(site) {
+		writeErr(w, http.StatusNotFound, "no site named "+site+"; deploy it first")
+		return
+	}
 	mux.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), user)))
 }
 
@@ -154,14 +166,15 @@ func (s *Server) identify(r *http.Request) *auth.User {
 		return nil
 	}
 	if hasToken {
-		owner, err := s.store.LookupToken(r.Context(), auth.HashToken(token))
+		hash := auth.HashToken(token)
+		owner, err := s.store.LookupToken(r.Context(), hash)
 		if err != nil {
 			if !errors.Is(err, store.ErrNotFound) {
 				slog.Error("token lookup", "err", err)
 			}
 			return nil
 		}
-		return &auth.User{Email: owner.Email, Name: owner.Name, Via: "token"}
+		return &auth.User{Email: owner.Email, Name: owner.Name, Via: "token", TokenHash: hash}
 	}
 	return s.authn.Authenticate(r)
 }

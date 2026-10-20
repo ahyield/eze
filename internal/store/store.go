@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS tokens (
 	name         TEXT NOT NULL,
 	label        TEXT NOT NULL,
 	created_at   INTEGER NOT NULL,
-	last_used_at INTEGER
+	last_used_at INTEGER,
+	expires_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS tokens_email ON tokens(email);
 
@@ -96,6 +97,10 @@ func Open(dataDir string) (*Store, error) {
 	// One connection serialises writes and avoids SQLITE_BUSY; plenty for a single-VM deployment.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	if err := migrateTokenExpiry(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -199,31 +204,6 @@ func scanSite(r scanner) (*Site, error) {
 	site.CreatedAt = time.UnixMilli(created).UTC()
 	site.UpdatedAt = time.UnixMilli(updated).UTC()
 	return &site, nil
-}
-
-type TokenOwner struct {
-	Email string
-	Name  string
-}
-
-func (s *Store) CreateToken(ctx context.Context, hash, email, name, label string) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO tokens (hash, email, name, label, created_at) VALUES (?, ?, ?, ?, ?)`,
-		hash, email, name, label, now())
-	return err
-}
-
-func (s *Store) LookupToken(ctx context.Context, hash string) (*TokenOwner, error) {
-	var o TokenOwner
-	err := s.db.QueryRowContext(ctx, `SELECT email, name FROM tokens WHERE hash = ?`, hash).Scan(&o.Email, &o.Name)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	_, _ = s.db.ExecContext(ctx, `UPDATE tokens SET last_used_at = ? WHERE hash = ?`, now(), hash)
-	return &o, nil
 }
 
 type Deploy struct {

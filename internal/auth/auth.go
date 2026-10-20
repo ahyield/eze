@@ -17,6 +17,8 @@ type User struct {
 	Name  string `json:"name"`
 	// Via records how the request was authenticated: "token", "header", "oidc" or "dev".
 	Via string `json:"-"`
+	// TokenHash identifies the API token used, when Via is "token".
+	TokenHash string `json:"-"`
 }
 
 // Authenticator identifies browser requests.

@@ -41,6 +41,9 @@ type Result struct {
 	Model      string `json:"model"`       // the model that answered, which a refusal fallback can change
 	StopReason string `json:"stop_reason"` // end_turn, max_tokens, refusal, ...
 	Usage      Usage  `json:"usage"`
+	// Complete reports whether the provider sent final usage. Without it, OutputTokens
+	// undercounts: generation (including unseen thinking) may have run past what arrived.
+	Complete bool `json:"-"`
 }
 
 // Provider generates a reply, calling onText with each piece of text as it arrives.
@@ -138,6 +141,7 @@ func resultOf(msg *anthropic.BetaMessage) *Result {
 		Text:       text.String(),
 		Model:      string(msg.Model),
 		StopReason: string(msg.StopReason),
+		Complete:   msg.StopReason != "",
 		Usage: Usage{
 			InputTokens:  u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens,
 			OutputTokens: u.OutputTokens,
