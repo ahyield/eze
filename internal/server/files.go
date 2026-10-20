@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"io"
 	"mime"
@@ -67,7 +68,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	defer part.Close()
 
 	id := store.NewID()
-	size, head, err := s.uploads.Save(site, id, part, limit)
+	size, head, err := s.uploads.Save(r.Context(), site, id, part, limit)
 	if errors.Is(err, uploads.ErrTooLarge) {
 		if limit < s.cfg.MaxUploadBytes {
 			writeErr(w, http.StatusRequestEntityTooLarge, "file is larger than this site's remaining upload quota")
@@ -91,7 +92,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
 	}
 	if err := s.store.CreateFile(r.Context(), site, f); err != nil {
-		s.uploads.Delete(site, id)
+		s.uploads.Delete(context.WithoutCancel(r.Context()), site, id)
 		s.internalErr(w, r, err)
 		return
 	}
@@ -177,11 +178,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	file, err := s.uploads.Open(siteFrom(r.Context()), f.ID)
-	if err != nil {
-		s.internalErr(w, r, err)
-		return
-	}
+	file := s.uploads.Open(r.Context(), siteFrom(r.Context()), f.ID, f.Size)
 	defer file.Close()
 
 	h := w.Header()
@@ -214,7 +211,7 @@ func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, r, err)
 		return
 	}
-	if err := s.uploads.Delete(site, id); err != nil {
+	if err := s.uploads.Delete(r.Context(), site, id); err != nil {
 		s.internalErr(w, r, err)
 		return
 	}

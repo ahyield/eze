@@ -40,8 +40,13 @@ func (e *env) upload(site, as, filename, contentType string, content []byte) *ht
 	return e.do(req{method: "POST", url: "https://" + site + ".eze.test/_q/files", as: as, body: body, headers: map[string]string{"Content-Type": ct}})
 }
 
-func TestFileUploadAndServe(t *testing.T) {
-	e := newEnv(t)
+func TestFileUploadAndServe(t *testing.T) { testFileUploadAndServe(t, newEnv(t)) }
+
+func TestFileUploadAndServeInBucket(t *testing.T) {
+	testFileUploadAndServe(t, newEnv(t, func(c *config.Config) { c.Storage = "mem" }))
+}
+
+func testFileUploadAndServe(t *testing.T, e *env) {
 	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 100)...)
 
 	w := e.upload("blog", ana, "../../cat photo.png", "application/octet-stream", png)

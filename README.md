@@ -103,7 +103,8 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_AUTH` | required | `oidc`, `header` or `dev`. |
 | `EZE_ADDR` | `:8080` | Listen address. |
 | `EZE_SCHEME` | `https` | Public scheme, used for links, redirects and cookies. |
-| `EZE_DATA_DIR` | `./data` | Deployed sites, uploads and `eze.db`. Back this up. |
+| `EZE_DATA_DIR` | `./data` | `eze.db`, plus deployed sites and uploads unless `EZE_STORAGE` is set. Back this up. |
+| `EZE_STORAGE` | | Keep sites and uploads in a bucket instead: `s3://bucket?region=...`, `gs://bucket`, or any S3-compatible store. See [Storing files in a bucket](docs/deploy.md#storing-files-in-a-bucket). |
 | `EZE_OVERWRITE` | `anyone` | `anyone` or `owner` (first deployer owns the site). |
 | `EZE_OIDC_ISSUER`, `EZE_OIDC_CLIENT_ID`, `EZE_OIDC_CLIENT_SECRET` | | OIDC client. Redirect URI: `https://<EZE_DOMAIN>/_q/auth/callback`. |
 | `EZE_OIDC_ALLOWED_DOMAINS` | | Comma-separated email domains allowed to sign in. Required for OIDC. |

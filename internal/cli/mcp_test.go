@@ -23,6 +23,7 @@ import (
 	"github.com/ahyield/eze/internal/server"
 	"github.com/ahyield/eze/internal/sites"
 	"github.com/ahyield/eze/internal/store"
+	"github.com/ahyield/eze/internal/uploads"
 )
 
 // mcpEnv runs a real eze server and connects an MCP client to newMCPServer through it.
@@ -47,11 +48,15 @@ func newMCPEnv(t *testing.T, loggedIn bool) *mcpEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	ss, err := sites.NewStore(dir, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
+	ss, err := sites.NewStore(dir, nil, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := server.New(cfg, &auth.Dev{Email: "dev@example.com"}, st, ss)
+	up, err := uploads.NewStore(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, err := server.New(cfg, &auth.Dev{Email: "dev@example.com"}, st, ss, up)
 	if err != nil {
 		t.Fatal(err)
 	}

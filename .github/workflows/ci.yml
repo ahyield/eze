@@ -31,3 +31,31 @@ jobs:
           for i in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && exit 0; sleep 1; done
           docker logs eze
           exit 1
+
+  storage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build -o eze ./cmd/eze
+      - name: start fake S3 and Google Cloud Storage servers
+        run: |
+          go install github.com/johannesboyne/gofakes3/cmd/gofakes3@v1.2.0
+          go install github.com/fsouza/fake-gcs-server@v1.56.1
+          mkdir -p gcs/eze
+          gofakes3 -host 127.0.0.1:9000 -backend memory -initialbucket eze -quiet &
+          fake-gcs-server -scheme http -host 127.0.0.1 -port 4443 -public-host 127.0.0.1:4443 -backend memory -data gcs &
+          sleep 2
+      - name: local disk
+        run: scripts/storage-smoke.sh ./eze ''
+      - name: S3
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+        run: scripts/storage-smoke.sh ./eze 's3://eze?endpoint=http://127.0.0.1:9000&region=us-east-1&use_path_style=true'
+      - name: Google Cloud Storage
+        env:
+          STORAGE_EMULATOR_HOST: 127.0.0.1:4443
+        run: scripts/storage-smoke.sh ./eze gs://eze

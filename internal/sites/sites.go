@@ -1,4 +1,4 @@
-// Package sites stores each site as a plain directory of files and serves them.
+// Package sites stores each site's deployed files, on local disk or in a bucket, and serves them.
 package sites
 
 import (
@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"gocloud.dev/blob"
 )
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -26,43 +29,69 @@ var reserved = map[string]bool{"www": true, "api": true, "admin": true, "auth": 
 
 func ValidName(name string) bool { return nameRe.MatchString(name) && !reserved[name] }
 
+// backend holds the live version of each site. Deploys are unpacked into a local staging
+// directory first, so a backend only has to swap a finished site in.
+type backend interface {
+	// publish makes the files in staging the live site, all at once.
+	publish(name, staging string) error
+	// remove deletes the site, returning os.ErrNotExist if there is none.
+	remove(name string) error
+	// cleanup deletes anything left of earlier versions. It runs in the background, under the site's lock.
+	cleanup(name string)
+	// current returns the live site's files.
+	current(ctx context.Context, name string) (fs.FS, bool)
+}
+
 type Store struct {
-	root string // <data>/sites
-	tmp  string // <data>/tmp, same filesystem as root so renames are atomic
+	tmp     string // <data>/tmp, where uploads are unpacked
+	backend backend
 
 	MaxSiteBytes int64
 	MaxSiteFiles int
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
+	bg    sync.WaitGroup
 }
 
-func NewStore(dataDir string, maxBytes int64, maxFiles int) (*Store, error) {
+// NewStore keeps sites in bucket when it isn't nil, and under <dataDir>/sites otherwise.
+func NewStore(dataDir string, bucket *blob.Bucket, maxBytes int64, maxFiles int) (*Store, error) {
 	s := &Store{
-		root:         filepath.Join(dataDir, "sites"),
 		tmp:          filepath.Join(dataDir, "tmp"),
 		MaxSiteBytes: maxBytes,
 		MaxSiteFiles: maxFiles,
 		locks:        map[string]*sync.Mutex{},
 	}
-	for _, d := range []string{s.root, s.tmp} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			return nil, err
-		}
+	if err := os.MkdirAll(s.tmp, 0o755); err != nil {
+		return nil, err
 	}
 	// Leftovers from deploys interrupted by a crash.
 	entries, _ := os.ReadDir(s.tmp)
 	for _, e := range entries {
 		os.RemoveAll(filepath.Join(s.tmp, e.Name()))
 	}
+	if bucket == nil {
+		lb, err := newLocalBackend(filepath.Join(dataDir, "sites"), s.tmp)
+		if err != nil {
+			return nil, err
+		}
+		s.backend = lb
+		return s, nil
+	}
+	bb, stale, err := newBucketBackend(context.Background(), bucket)
+	if err != nil {
+		return nil, err
+	}
+	s.backend = bb
+	for _, name := range stale {
+		s.cleanupLater(name)
+	}
 	return s, nil
 }
 
-func (s *Store) dir(name string) string { return filepath.Join(s.root, name) }
-
 func (s *Store) Exists(name string) bool {
-	fi, err := os.Stat(s.dir(name))
-	return err == nil && fi.IsDir()
+	_, ok := s.backend.current(context.Background(), name)
+	return ok
 }
 
 func (s *Store) lock(name string) func() {
@@ -76,6 +105,21 @@ func (s *Store) lock(name string) func() {
 	l.Lock()
 	return l.Unlock
 }
+
+// cleanupLater removes a site's leftovers in the background. Taking the site's lock keeps it
+// from touching the files of a deploy that is still uploading.
+func (s *Store) cleanupLater(name string) {
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		unlock := s.lock(name)
+		defer unlock()
+		s.backend.cleanup(name)
+	}()
+}
+
+// Wait blocks until background cleanups have finished.
+func (s *Store) Wait() { s.bg.Wait() }
 
 type DeployError struct{ msg string }
 
@@ -93,8 +137,8 @@ func readErr(err error) error {
 	return deployErr("reading archive: %v", err)
 }
 
-// Deploy extracts a .tar.gz or .zip archive into a staging directory and swaps it in place of the
-// current site, so visitors never see a half-written site.
+// Deploy unpacks a .tar.gz or .zip archive into a staging directory, then swaps it in place
+// of the current site, so visitors never see a half-written site.
 func (s *Store) Deploy(name string, archive io.Reader) (files int, bytes int64, err error) {
 	staging, err := os.MkdirTemp(s.tmp, "deploy-"+name+"-")
 	if err != nil {
@@ -108,52 +152,35 @@ func (s *Store) Deploy(name string, archive io.Reader) (files int, bytes int64, 
 	if files == 0 {
 		return 0, 0, deployErr("archive contains no files")
 	}
-	if err := os.Chmod(staging, 0o755); err != nil {
-		return 0, 0, err
-	}
 
 	unlock := s.lock(name)
 	defer unlock()
-
-	target := s.dir(name)
-	old := ""
-	if s.Exists(name) {
-		if old, err = os.MkdirTemp(s.tmp, "old-"+name+"-"); err != nil {
-			return 0, 0, err
-		}
-		// MkdirTemp creates the directory; Rename needs the destination to not exist.
-		os.Remove(old)
-		if err := os.Rename(target, old); err != nil {
-			return 0, 0, err
-		}
-	}
-	if err := os.Rename(staging, target); err != nil {
-		if old != "" {
-			os.Rename(old, target) // put the previous version back
-		}
+	if err := s.backend.publish(name, staging); err != nil {
 		return 0, 0, err
 	}
-	if old != "" {
-		os.RemoveAll(old)
-	}
+	s.cleanupLater(name)
 	return files, bytes, nil
+}
+
+// Import publishes an existing directory of site files as is, for moving local sites into a bucket.
+func (s *Store) Import(name, dir string) error {
+	unlock := s.lock(name)
+	defer unlock()
+	if err := s.backend.publish(name, dir); err != nil {
+		return err
+	}
+	s.cleanupLater(name)
+	return nil
 }
 
 func (s *Store) Delete(name string) error {
 	unlock := s.lock(name)
 	defer unlock()
-	if !s.Exists(name) {
-		return os.ErrNotExist
-	}
-	old, err := os.MkdirTemp(s.tmp, "rm-"+name+"-")
-	if err != nil {
+	if err := s.backend.remove(name); err != nil {
 		return err
 	}
-	os.Remove(old)
-	if err := os.Rename(s.dir(name), old); err != nil {
-		return err
-	}
-	return os.RemoveAll(old)
+	s.cleanupLater(name)
+	return nil
 }
 
 // extract unpacks a .tar.gz or .zip upload, detected from its first bytes.
@@ -385,18 +412,20 @@ func cleanPath(p string) (string, bool) {
 // Serve responds with a static file from the named site, falling back to index.html for
 // directories and the site's own 404.html for missing files.
 func (s *Store) Serve(w http.ResponseWriter, r *http.Request, name string) {
-	if !s.Exists(name) {
+	fsys, ok := s.backend.current(r.Context(), name)
+	if !ok {
 		http.Error(w, "No site named "+name+" yet.", http.StatusNotFound)
 		return
 	}
-	root := s.dir(name)
 	rel, ok := cleanPath(strings.TrimPrefix(r.URL.Path, "/"))
 	if !ok {
-		s.notFound(w, r, root)
+		notFound(w, r, fsys)
 		return
 	}
-	full := filepath.Join(root, filepath.FromSlash(rel))
-	fi, err := os.Stat(full)
+	if rel == "" {
+		rel = "."
+	}
+	fi, err := fs.Stat(fsys, rel)
 	if err == nil && fi.IsDir() {
 		if !strings.HasSuffix(r.URL.Path, "/") {
 			target := r.URL.Path + "/"
@@ -406,27 +435,26 @@ func (s *Store) Serve(w http.ResponseWriter, r *http.Request, name string) {
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
 		}
-		full = filepath.Join(full, "index.html")
-		fi, err = os.Stat(full)
+		rel = path.Join(rel, "index.html")
+		fi, err = fs.Stat(fsys, rel)
 	}
 	if err != nil || fi.IsDir() {
-		s.notFound(w, r, root)
+		notFound(w, r, fsys)
 		return
 	}
-	serveFile(w, r, full, fi, http.StatusOK)
+	serveFile(w, r, fsys, rel, fi, http.StatusOK)
 }
 
-func (s *Store) notFound(w http.ResponseWriter, r *http.Request, root string) {
-	custom := filepath.Join(root, "404.html")
-	if fi, err := os.Stat(custom); err == nil && !fi.IsDir() {
-		serveFile(w, r, custom, fi, http.StatusNotFound)
+func notFound(w http.ResponseWriter, r *http.Request, fsys fs.FS) {
+	if fi, err := fs.Stat(fsys, "404.html"); err == nil && !fi.IsDir() {
+		serveFile(w, r, fsys, "404.html", fi, http.StatusNotFound)
 		return
 	}
 	http.NotFound(w, r)
 }
 
-func serveFile(w http.ResponseWriter, r *http.Request, full string, fi os.FileInfo, status int) {
-	f, err := os.Open(full)
+func serveFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, rel string, fi fs.FileInfo, status int) {
+	f, err := fsys.Open(rel)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -434,11 +462,14 @@ func serveFile(w http.ResponseWriter, r *http.Request, full string, fi os.FileIn
 	defer f.Close()
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if status != http.StatusOK {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	rs, seekable := f.(io.ReadSeeker)
+	if status != http.StatusOK || !seekable {
+		if status != http.StatusOK {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		}
 		w.WriteHeader(status)
 		io.Copy(w, f)
 		return
 	}
-	http.ServeContent(w, r, fi.Name(), fi.ModTime(), f)
+	http.ServeContent(w, r, fi.Name(), fi.ModTime(), rs)
 }

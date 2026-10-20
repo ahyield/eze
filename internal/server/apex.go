@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -140,7 +141,7 @@ func (s *Server) handleDeleteSite(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, r, err)
 		return
 	}
-	if err := s.uploads.DeleteSite(name); err != nil {
+	if err := s.uploads.DeleteSite(context.WithoutCancel(r.Context()), name); err != nil {
 		s.internalErr(w, r, err)
 		return
 	}

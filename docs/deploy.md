@@ -123,11 +123,55 @@ docker run -d -p 127.0.0.1:8080:8080 -v eze-data:/data \
 In header mode with Docker, connections arrive from the Docker bridge, so set
 `EZE_TRUSTED_PROXIES` to the proxy container's address or network, never `0.0.0.0/0`.
 
+## Storing files in a bucket
+
+By default deployed sites and uploads live in `EZE_DATA_DIR`. To keep them in S3, an
+S3-compatible store or Google Cloud Storage instead, set `EZE_STORAGE`:
+
+```sh
+EZE_STORAGE=s3://my-bucket?region=us-east-1
+EZE_STORAGE=gs://my-bucket
+# Cloudflare R2, MinIO, Backblaze B2 and other S3-compatible stores:
+EZE_STORAGE='s3://my-bucket?endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true'
+```
+
+Add `&prefix=eze/` to keep eze's files in one folder of a shared bucket. Credentials come
+from the usual places: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, an instance role or
+`~/.aws`, and for Google Cloud `GOOGLE_APPLICATION_CREDENTIALS` or workload identity. eze
+checks at startup that it can write, read and delete in the bucket, and refuses to start if not.
+
+eze needs these permissions on the bucket and nothing else:
+
+- **S3:** `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:ListBucket`.
+- **Google Cloud Storage:** `roles/storage.objectAdmin` on the bucket.
+
+Keep the bucket private: block public access and don't turn on website hosting. Visitors
+never fetch from the bucket directly. eze streams every file itself after checking who is
+signing in, which is the whole point.
+
+`EZE_DATA_DIR` is still needed for `eze.db` and as scratch space for unpacking deploys.
+eze runs as a single server either way: the database and live rooms are on that machine.
+
+### Moving an existing install
+
+Stop eze, then copy its sites and uploads into the bucket:
+
+```sh
+EZE_DATA_DIR=/var/lib/eze EZE_STORAGE=s3://my-bucket?region=us-east-1 eze storage migrate
+```
+
+It's safe to run again: sites and uploads already in the bucket are skipped (`--force`
+re-copies sites). Start eze with `EZE_STORAGE` set, check your sites, then delete `sites/`
+and `uploads/` from the data folder.
+
 ## Backups
 
-All state lives in `EZE_DATA_DIR`: `sites/` (deployed files), `uploads/` (files uploaded
-through sites) and `eze.db` (SQLite, WAL mode). Back up with `sqlite3 eze.db ".backup backup.db"`
-plus a copy of `sites/` and `uploads/`.
+`eze.db` (SQLite, WAL mode) always lives in `EZE_DATA_DIR`. Back it up with
+`sqlite3 eze.db ".backup backup.db"`, or stream it continuously to a bucket with
+[Litestream](https://litestream.io).
+
+Without `EZE_STORAGE`, also back up `sites/` (deployed files) and `uploads/` (files uploaded
+through sites) in the same folder. With a bucket, use the bucket's own versioning or backups.
 
 `eze.ai` replies stream as server-sent events. eze sends `X-Accel-Buffering: no` so nginx
 won't buffer them; other proxies may need response buffering turned off for `/_q/ai/`.

@@ -37,7 +37,7 @@ func TestDashboardTarballDeploys(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decoding archive: %v", err)
 	}
-	ss, err := sites.NewStore(t.TempDir(), 1<<20, 100)
+	ss, err := sites.NewStore(t.TempDir(), nil, 1<<20, 100)
 	if err != nil {
 		t.Fatal(err)
 	}

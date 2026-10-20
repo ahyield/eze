@@ -17,12 +17,15 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"gocloud.dev/blob"
+	"gocloud.dev/blob/memblob"
 
 	"github.com/ahyield/eze/internal/auth"
 	"github.com/ahyield/eze/internal/config"
 	"github.com/ahyield/eze/internal/sites"
 	"github.com/ahyield/eze/internal/store"
 	"github.com/ahyield/eze/internal/testutil"
+	"github.com/ahyield/eze/internal/uploads"
 )
 
 const (
@@ -72,7 +75,18 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	ss, err := sites.NewStore(dir, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
+	// Tests set Storage to "mem" to keep sites and uploads in one in-memory bucket.
+	var bucket *blob.Bucket
+	if cfg.Storage == "mem" {
+		bucket = memblob.OpenBucket(nil)
+		t.Cleanup(func() { bucket.Close() })
+	}
+	ss, err := sites.NewStore(dir, bucket, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ss.Wait)
+	up, err := uploads.NewStore(dir, bucket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +101,7 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 		NameHeader:     "X-Name",
 		TrustedProxies: []netip.Prefix{netip.MustParsePrefix("192.0.2.1/32"), netip.MustParsePrefix("127.0.0.1/32")},
 	}
-	srv, err := New(cfg, authn, st, ss)
+	srv, err := New(cfg, authn, st, ss, up)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,8 +211,13 @@ func TestRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestDeployListDelete(t *testing.T) {
-	e := newEnv(t)
+func TestDeployListDelete(t *testing.T) { testDeployListDelete(t, newEnv(t)) }
+
+func TestDeployListDeleteInBucket(t *testing.T) {
+	testDeployListDelete(t, newEnv(t, func(c *config.Config) { c.Storage = "mem" }))
+}
+
+func testDeployListDelete(t *testing.T, e *env) {
 	w := e.deploy("blog", ana, map[string]string{"index.html": "v1", "a.js": "1"})
 	if w.Code != 200 {
 		t.Fatalf("deploy = %d %s", w.Code, w.Body)

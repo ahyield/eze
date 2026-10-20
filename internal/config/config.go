@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -31,6 +32,7 @@ type Config struct {
 	Domain  string // apex host, e.g. "eze.example.com" or "localhost:8080"; sites live at <site>.<Domain>
 	Scheme  string
 	DataDir string
+	Storage string // "" keeps sites and uploads in DataDir; otherwise an s3:// or gs:// bucket URL
 
 	AuthMode string
 
@@ -84,6 +86,7 @@ func Load() (*Config, error) {
 		Domain:           strings.ToLower(env("EZE_DOMAIN", "")),
 		Scheme:           env("EZE_SCHEME", "https"),
 		DataDir:          env("EZE_DATA_DIR", "./data"),
+		Storage:          env("EZE_STORAGE", ""),
 		AuthMode:         env("EZE_AUTH", ""),
 		EmailHeader:      env("EZE_AUTH_EMAIL_HEADER", "X-Forwarded-Email"),
 		NameHeader:       env("EZE_AUTH_NAME_HEADER", "X-Forwarded-User"),
@@ -92,6 +95,10 @@ func Load() (*Config, error) {
 		OIDCClientSecret: env("EZE_OIDC_CLIENT_SECRET", ""),
 		DevEmail:         env("EZE_DEV_EMAIL", "dev@localhost"),
 		OverwritePolicy:  env("EZE_OVERWRITE", OverwriteAnyone),
+	}
+
+	if err := CheckStorage(c.Storage); err != nil {
+		return nil, err
 	}
 
 	var err error
@@ -318,4 +325,16 @@ func loopbackAddr(addr string) bool {
 	}
 	ip, err := netip.ParseAddr(host)
 	return err == nil && ip.IsLoopback()
+}
+
+// CheckStorage validates EZE_STORAGE: empty, or an s3:// or gs:// URL naming a bucket.
+func CheckStorage(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "s3" && u.Scheme != "gs") || u.Host == "" {
+		return errors.New("EZE_STORAGE must be s3://bucket or gs://bucket, optionally with ?options")
+	}
+	return nil
 }

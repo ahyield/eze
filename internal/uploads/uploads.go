@@ -3,6 +3,7 @@
 package uploads
 
 import (
+	"context"
 	"errors"
 	"io"
 	"mime"
@@ -13,71 +14,87 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"gocloud.dev/blob"
+	"gocloud.dev/blob/fileblob"
+
+	"github.com/ahyield/eze/internal/storage"
 )
 
 // ErrTooLarge means the upload went over the limit passed to Save.
 var ErrTooLarge = errors.New("file too large")
 
+// Store keeps each file at <site>/<id> in a bucket: <data>/uploads on local disk, or the
+// uploads/ prefix of the EZE_STORAGE bucket.
 type Store struct {
-	root string // <data>/uploads; each site gets <root>/<site>/<id>
+	b      *blob.Bucket
+	prefix string
+	dir    string // <data>/uploads in local mode, or ""
 }
 
-func NewStore(dataDir string) (*Store, error) {
-	root := filepath.Join(dataDir, "uploads")
-	if err := os.MkdirAll(root, 0o755); err != nil {
+// NewStore uses bucket when it isn't nil, and <dataDir>/uploads otherwise.
+func NewStore(dataDir string, bucket *blob.Bucket) (*Store, error) {
+	if bucket != nil {
+		return &Store{b: bucket, prefix: "uploads/"}, nil
+	}
+	dir := filepath.Join(dataDir, "uploads")
+	b, err := fileblob.OpenBucket(dir, &fileblob.Options{
+		CreateDir: true,
+		NoTempDir: true, // the system temp dir may be on another filesystem, which breaks the final rename
+		Metadata:  fileblob.MetadataDontWrite,
+	})
+	if err != nil {
 		return nil, err
 	}
-	return &Store{root: root}, nil
+	return &Store{b: b, dir: dir}, nil
 }
 
-func (s *Store) path(site, id string) string { return filepath.Join(s.root, site, id) }
+func (s *Store) key(site, id string) string { return s.prefix + site + "/" + id }
 
-// Save streams r to disk under id, failing with ErrTooLarge past max bytes. It returns
+// Save streams r into storage under id, failing with ErrTooLarge past max bytes. It returns
 // the size and up to the first 512 bytes, for content sniffing. Callers validate site and id.
-func (s *Store) Save(site, id string, r io.Reader, max int64) (size int64, head []byte, err error) {
-	dir := filepath.Join(s.root, site)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return 0, nil, err
-	}
-	tmp, err := os.CreateTemp(dir, ".part-*")
+func (s *Store) Save(ctx context.Context, site, id string, r io.Reader, max int64) (size int64, head []byte, err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w, err := s.b.NewWriter(ctx, s.key(site, id), nil)
 	if err != nil {
 		return 0, nil, err
 	}
-	defer func() {
-		if err != nil {
-			tmp.Close()
-			os.Remove(tmp.Name())
-		}
-	}()
-
 	sniff := &headWriter{max: 512}
-	size, err = io.Copy(io.MultiWriter(tmp, sniff), io.LimitReader(r, max+1))
+	size, err = io.Copy(io.MultiWriter(w, sniff), io.LimitReader(r, max+1))
+	if err == nil && size > max {
+		err = ErrTooLarge
+	}
 	if err != nil {
+		cancel() // makes Close abort the write, so nothing is stored
+		w.Close()
 		return 0, nil, err
 	}
-	if size > max {
-		return 0, nil, ErrTooLarge
-	}
-	if err = tmp.Close(); err != nil {
-		return 0, nil, err
-	}
-	if err = os.Rename(tmp.Name(), s.path(site, id)); err != nil {
+	if err := w.Close(); err != nil {
 		return 0, nil, err
 	}
 	return size, sniff.buf, nil
 }
 
-func (s *Store) Open(site, id string) (*os.File, error) { return os.Open(s.path(site, id)) }
+// Open returns the file's contents. size comes from the file's record, so opening costs no request.
+func (s *Store) Open(ctx context.Context, site, id string, size int64) io.ReadSeekCloser {
+	return storage.NewReader(ctx, s.b, s.key(site, id), size)
+}
 
-func (s *Store) Delete(site, id string) error {
-	err := os.Remove(s.path(site, id))
-	if errors.Is(err, os.ErrNotExist) {
+func (s *Store) Delete(ctx context.Context, site, id string) error {
+	err := s.b.Delete(ctx, s.key(site, id))
+	if storage.IsNotFound(err) {
 		return nil
 	}
 	return err
 }
 
-func (s *Store) DeleteSite(site string) error { return os.RemoveAll(filepath.Join(s.root, site)) }
+func (s *Store) DeleteSite(ctx context.Context, site string) error {
+	if s.dir != "" {
+		return os.RemoveAll(filepath.Join(s.dir, site))
+	}
+	return storage.DeletePrefix(ctx, s.b, s.prefix+site+"/")
+}
 
 type headWriter struct {
 	buf []byte

@@ -19,6 +19,7 @@ import (
 	"github.com/ahyield/eze/internal/server"
 	"github.com/ahyield/eze/internal/sites"
 	"github.com/ahyield/eze/internal/store"
+	"github.com/ahyield/eze/internal/uploads"
 )
 
 const usage = `eze: ship a folder of HTML to a private URL.
@@ -35,6 +36,7 @@ Usage:
   eze logout                    revoke this computer's token
   eze mcp                       serve eze's tools to an MCP client (Claude Code, Cursor...)
   eze serve                     run the server (configured with EZE_* env vars)
+  eze storage migrate [--force]  copy local sites and uploads into the EZE_STORAGE bucket
 `
 
 func main() {
@@ -43,16 +45,17 @@ func main() {
 		os.Exit(2)
 	}
 	cmds := map[string]func([]string) error{
-		"login":  cli.Login,
-		"init":   cli.Init,
-		"deploy": cli.Deploy,
-		"ls":     cli.List,
-		"rm":     cli.Remove,
-		"whoami": cli.Whoami,
-		"tokens": cli.Tokens,
-		"logout": cli.Logout,
-		"mcp":    cli.MCP,
-		"serve":  func([]string) error { return serve() },
+		"login":   cli.Login,
+		"init":    cli.Init,
+		"deploy":  cli.Deploy,
+		"ls":      cli.List,
+		"rm":      cli.Remove,
+		"whoami":  cli.Whoami,
+		"tokens":  cli.Tokens,
+		"logout":  cli.Logout,
+		"mcp":     cli.MCP,
+		"serve":   func([]string) error { return serve() },
+		"storage": storageCmd,
 	}
 	cmd, ok := cmds[os.Args[1]]
 	if !ok {
@@ -89,7 +92,18 @@ func serve() error {
 		return err
 	}
 	defer st.Close()
-	ss, err := sites.NewStore(cfg.DataDir, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
+	bucket, err := openBucket(cfg.Storage)
+	if err != nil {
+		return err
+	}
+	if bucket != nil {
+		defer bucket.Close()
+	}
+	ss, err := sites.NewStore(cfg.DataDir, bucket, cfg.MaxSiteBytes, cfg.MaxSiteFiles)
+	if err != nil {
+		return err
+	}
+	up, err := uploads.NewStore(cfg.DataDir, bucket)
 	if err != nil {
 		return err
 	}
@@ -121,7 +135,7 @@ func serve() error {
 		authn = &auth.Dev{Email: cfg.DevEmail}
 	}
 
-	handler, err := server.New(cfg, authn, st, ss)
+	handler, err := server.New(cfg, authn, st, ss, up)
 	if err != nil {
 		return err
 	}

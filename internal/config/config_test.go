@@ -16,7 +16,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"EZE_OVERWRITE", "EZE_MAX_DEPLOY_BYTES", "EZE_MAX_SITE_BYTES", "EZE_MAX_SITE_FILES",
 		"EZE_MAX_DOC_BYTES", "EZE_RATE_LIMIT", "EZE_RATE_BURST", "EZE_MAX_UPLOAD_BYTES", "EZE_UPLOAD_QUOTA_BYTES",
 		"EZE_ANTHROPIC_API_KEY", "EZE_ANTHROPIC_BASE_URL", "EZE_AI_MODELS", "EZE_AI_DEFAULT_MODEL", "EZE_AI_DAILY_TOKENS",
-		"EZE_AI_MAX_OUTPUT_TOKENS", "EZE_OIDC_ALLOW_PUBLIC_DOMAINS", "EZE_OIDC_ALLOW_UNVERIFIED_EMAIL", "EZE_TOKEN_TTL_DAYS", "EZE_AI_MAX_CONCURRENT", "EZE_AI_PROVIDER", "EZE_OPENAI_API_KEY", "EZE_OPENAI_BASE_URL",
+		"EZE_AI_MAX_OUTPUT_TOKENS", "EZE_OIDC_ALLOW_PUBLIC_DOMAINS", "EZE_OIDC_ALLOW_UNVERIFIED_EMAIL", "EZE_TOKEN_TTL_DAYS", "EZE_AI_MAX_CONCURRENT", "EZE_AI_PROVIDER", "EZE_OPENAI_API_KEY", "EZE_OPENAI_BASE_URL", "EZE_STORAGE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -37,6 +37,10 @@ func TestLoad(t *testing.T) {
 		{"no auth", map[string]string{"EZE_DOMAIN": "eze.page"}, "EZE_AUTH is required"},
 		{"unknown auth", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "none"}, "unknown"},
 		{"header ok", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header"}, ""},
+		{"s3 storage", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_STORAGE": "s3://bucket?region=us-east-1"}, ""},
+		{"gcs storage", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_STORAGE": "gs://bucket"}, ""},
+		{"local path as storage", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_STORAGE": "/var/lib/eze"}, "EZE_STORAGE"},
+		{"storage without bucket", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_STORAGE": "s3://"}, "EZE_STORAGE"},
 		{"bad proxy cidr", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "header", "EZE_TRUSTED_PROXIES": "10.0.0.1"}, "EZE_TRUSTED_PROXIES"},
 		{"oidc missing client", map[string]string{"EZE_DOMAIN": "eze.page", "EZE_AUTH": "oidc"}, "EZE_OIDC_ISSUER"},
 		{"oidc missing domains", map[string]string{

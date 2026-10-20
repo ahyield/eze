@@ -35,11 +35,7 @@ type Server struct {
 	site   *http.ServeMux
 }
 
-func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *sites.Store) (*Server, error) {
-	up, err := uploads.NewStore(cfg.DataDir)
-	if err != nil {
-		return nil, err
-	}
+func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *sites.Store, up *uploads.Store) (*Server, error) {
 	s := &Server{
 		cfg:      cfg,
 		authn:    authn,
