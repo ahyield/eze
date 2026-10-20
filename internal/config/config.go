@@ -24,7 +24,7 @@ const (
 
 type Config struct {
 	Addr    string
-	Domain  string // apex host, e.g. "eze.page" or "localhost:8080"; sites live at <site>.<Domain>
+	Domain  string // apex host, e.g. "eze.example.com" or "localhost:8080"; sites live at <site>.<Domain>
 	Scheme  string // "https" or "http"
 	DataDir string
 
@@ -129,7 +129,7 @@ func Load() (*Config, error) {
 	c.RateBurst = int(burst)
 
 	if c.Domain == "" {
-		return nil, errors.New("EZE_DOMAIN is required (e.g. eze.page)")
+		return nil, errors.New("EZE_DOMAIN is required (e.g. eze.example.com)")
 	}
 	if c.Scheme != "https" && c.Scheme != "http" {
 		return nil, fmt.Errorf("EZE_SCHEME must be https or http, got %q", c.Scheme)
@@ -155,6 +155,15 @@ func Load() (*Config, error) {
 		c.AllowedEmailDomains = splitList(strings.ToLower(env("EZE_OIDC_ALLOWED_DOMAINS", "")))
 		if len(c.AllowedEmailDomains) == 0 {
 			return nil, errors.New("oidc auth requires EZE_OIDC_ALLOWED_DOMAINS so only your organisation can sign in")
+		}
+		if env("EZE_OIDC_ALLOW_PUBLIC_DOMAINS", "") != "true" {
+			for _, d := range c.AllowedEmailDomains {
+				if publicEmailDomains[d] {
+					return nil, fmt.Errorf("EZE_OIDC_ALLOWED_DOMAINS includes %s, which would let anyone on the internet sign in. "+
+						"eze trusts every signed-in person (they can deploy, overwrite sites and spend AI budget), so it is meant "+
+						"for one organisation's own domain. Set EZE_OIDC_ALLOW_PUBLIC_DOMAINS=true only if you really mean it", d)
+				}
+			}
 		}
 		secret, err := base64.StdEncoding.DecodeString(env("EZE_SESSION_SECRET", ""))
 		if err != nil || len(secret) < 32 {
@@ -190,6 +199,15 @@ func (c *Config) ApexURL(path string) string {
 // SiteURL returns the public URL of a site.
 func (c *Config) SiteURL(site string) string {
 	return c.Scheme + "://" + site + "." + c.Domain + "/"
+}
+
+// publicEmailDomains are free email providers: allowing one opens eze to the whole internet.
+var publicEmailDomains = map[string]bool{
+	"gmail.com": true, "googlemail.com": true, "outlook.com": true, "hotmail.com": true, "live.com": true,
+	"msn.com": true, "yahoo.com": true, "ymail.com": true, "icloud.com": true, "me.com": true, "mac.com": true,
+	"aol.com": true, "proton.me": true, "protonmail.com": true, "pm.me": true, "gmx.com": true, "gmx.de": true,
+	"gmx.net": true, "mail.com": true, "yandex.com": true, "yandex.ru": true, "zoho.com": true, "qq.com": true,
+	"163.com": true, "126.com": true, "fastmail.com": true, "hey.com": true, "tutanota.com": true, "tuta.io": true,
 }
 
 func env(key, def string) string {

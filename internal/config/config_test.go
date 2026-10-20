@@ -16,7 +16,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"EZE_OVERWRITE", "EZE_MAX_DEPLOY_BYTES", "EZE_MAX_SITE_BYTES", "EZE_MAX_SITE_FILES",
 		"EZE_MAX_DOC_BYTES", "EZE_RATE_LIMIT", "EZE_RATE_BURST", "EZE_MAX_UPLOAD_BYTES", "EZE_UPLOAD_QUOTA_BYTES",
 		"EZE_ANTHROPIC_API_KEY", "EZE_ANTHROPIC_BASE_URL", "EZE_AI_MODELS", "EZE_AI_DEFAULT_MODEL", "EZE_AI_DAILY_TOKENS",
-		"EZE_AI_MAX_OUTPUT_TOKENS",
+		"EZE_AI_MAX_OUTPUT_TOKENS", "EZE_OIDC_ALLOW_PUBLIC_DOMAINS",
 	} {
 		t.Setenv(k, "")
 	}
@@ -50,6 +50,15 @@ func TestLoad(t *testing.T) {
 		{"oidc ok", map[string]string{
 			"EZE_DOMAIN": "eze.page", "EZE_AUTH": "oidc", "EZE_OIDC_ISSUER": "https://idp", "EZE_OIDC_CLIENT_ID": "id",
 			"EZE_OIDC_CLIENT_SECRET": "s", "EZE_OIDC_ALLOWED_DOMAINS": "Example.com, corp.io", "EZE_SESSION_SECRET": secret,
+		}, ""},
+		{"oidc public email domain", map[string]string{
+			"EZE_DOMAIN": "eze.page", "EZE_AUTH": "oidc", "EZE_OIDC_ISSUER": "https://idp", "EZE_OIDC_CLIENT_ID": "id",
+			"EZE_OIDC_CLIENT_SECRET": "s", "EZE_OIDC_ALLOWED_DOMAINS": "example.com,Gmail.com", "EZE_SESSION_SECRET": secret,
+		}, "anyone on the internet"},
+		{"oidc public email domain, explicitly allowed", map[string]string{
+			"EZE_DOMAIN": "eze.page", "EZE_AUTH": "oidc", "EZE_OIDC_ISSUER": "https://idp", "EZE_OIDC_CLIENT_ID": "id",
+			"EZE_OIDC_CLIENT_SECRET": "s", "EZE_OIDC_ALLOWED_DOMAINS": "gmail.com", "EZE_SESSION_SECRET": secret,
+			"EZE_OIDC_ALLOW_PUBLIC_DOMAINS": "true",
 		}, ""},
 		{"dev on all interfaces", map[string]string{"EZE_DOMAIN": "localhost:8080", "EZE_AUTH": "dev"}, "loopback"},
 		{"dev on public ip", map[string]string{"EZE_DOMAIN": "localhost:8080", "EZE_AUTH": "dev", "EZE_ADDR": "0.0.0.0:8080"}, "loopback"},

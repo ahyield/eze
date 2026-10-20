@@ -7,14 +7,14 @@ multiplayer rooms, AI and the viewer's identity through a tiny browser SDK, with
 An open-source take on the idea behind Shopify's internal [Quick](https://shopify.engineering/quick) platform.
 
 ```sh
-eze login https://eze.page
+eze login https://eze.example.com
 eze init lunch-vote          # starter page + AGENTS.md so your coding agent knows the SDK
 cd lunch-vote
 claude "make a site where my team can vote on lunch spots in real time"
-eze deploy                   # live at https://lunch-vote.eze.page
+eze deploy                   # live at https://lunch-vote.eze.example.com
 ```
 
-No terminal? Open `https://eze.page`, drop a folder, a `.zip` or a single HTML file on the page,
+No terminal? Open `https://eze.example.com`, drop a folder, a `.zip` or a single HTML file on the page,
 pick a name, and it's live. Each site has a page at `/sites/<name>` with its deploy history,
 uploaded files, AI usage, a drop zone for new versions, and delete.
 
@@ -29,6 +29,14 @@ no spam, no abuse, no API keys in the browser. eze leans into that:
 - **A small, fixed set of capabilities.** Static files plus the SDK. No custom backends, no cron.
   The constraints are the feature.
 - **One binary, one SQLite file.** Runs comfortably on a small VM.
+
+## Who it is for
+
+eze is for one organisation's own people. Everyone who can sign in is trusted: they can open
+every site, read and write every site's data, redeploy or delete sites (unless
+`EZE_OVERWRITE=owner`), and spend AI budget. That trust is what keeps eze simple, so don't open
+it to the public. It refuses to start if OIDC sign-in would accept a public email domain like
+gmail.com. See [SECURITY.md](SECURITY.md).
 
 ## The browser SDK
 
@@ -54,7 +62,7 @@ viewer's existing session, and rate limited per user.
 
 ## Run it
 
-You need a domain with a wildcard DNS record (`eze.page` and `*.eze.page`
+You need a domain with a wildcard DNS record (`eze.example.com` and `*.eze.example.com`
 pointing at the server) and a wildcard TLS certificate, typically from a reverse proxy like Caddy.
 
 eze **refuses to start without authentication**. Pick one:
@@ -79,6 +87,7 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_OVERWRITE` | `anyone` | `anyone` or `owner` (first deployer owns the site). |
 | `EZE_OIDC_ISSUER`, `EZE_OIDC_CLIENT_ID`, `EZE_OIDC_CLIENT_SECRET` | | OIDC client. Redirect URI: `https://<EZE_DOMAIN>/_q/auth/callback`. |
 | `EZE_OIDC_ALLOWED_DOMAINS` | | Comma-separated email domains allowed to sign in. Required for OIDC. |
+| `EZE_OIDC_ALLOW_PUBLIC_DOMAINS` | | Set to `true` to allow public email domains (gmail.com...) above. You almost certainly don't want this. |
 | `EZE_SESSION_SECRET` | | Base64, at least 32 bytes (`openssl rand -base64 32`). Required for OIDC. |
 | `EZE_AUTH_EMAIL_HEADER` | `X-Forwarded-Email` | Header mode: email header. |
 | `EZE_AUTH_NAME_HEADER` | `X-Forwarded-User` | Header mode: display name header. |
@@ -137,6 +146,10 @@ per day in the `ai_usage` table of `eze.db`, so you can see where tokens went:
 ```sh
 sqlite3 eze.db "SELECT day, email, site, requests, input_tokens, output_tokens FROM ai_usage ORDER BY day DESC"
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ## License
 
