@@ -2,7 +2,7 @@
 
 Every setup needs:
 
-1. **DNS:** `eze.page` and `*.eze.page` pointing at your server.
+1. **DNS:** `eze.example.com` and `*.eze.example.com` pointing at your server.
 2. **TLS:** a certificate covering both names. Wildcards need a DNS challenge, which Caddy handles with a DNS plugin.
 3. **Authentication:** built-in OIDC, or an auth proxy in front. eze will not start without one.
 
@@ -13,13 +13,13 @@ original `Host` header (Caddy and nginx both do by default) and supports websock
 
 Register an OIDC client with your identity provider:
 
-- Redirect URI: `https://eze.page/_q/auth/callback`
+- Redirect URI: `https://eze.example.com/_q/auth/callback`
 - Scopes: `openid profile email`
 
 Caddyfile (using the [Cloudflare DNS plugin](https://github.com/caddy-dns/cloudflare) for the wildcard cert):
 
 ```caddy
-eze.page, *.eze.page {
+eze.example.com, *.eze.example.com {
 	tls {
 		dns cloudflare {env.CF_API_TOKEN}
 	}
@@ -30,7 +30,7 @@ eze.page, *.eze.page {
 eze:
 
 ```sh
-EZE_DOMAIN=eze.page \
+EZE_DOMAIN=eze.example.com \
 EZE_ADDR=127.0.0.1:8080 \
 EZE_AUTH=oidc \
 EZE_OIDC_ISSUER=https://accounts.google.com \
@@ -63,8 +63,8 @@ oauth2-proxy \
   --http-address=127.0.0.1:4180 \
   --reverse-proxy=true \
   --pass-user-headers=true \
-  --cookie-domain=.eze.page \
-  --whitelist-domain=.eze.page \
+  --cookie-domain=.eze.example.com \
+  --whitelist-domain=.eze.example.com \
   --email-domain=example.com \
   --skip-auth-route='^/_q/api/' \
   --skip-auth-strip-headers=true \
@@ -77,14 +77,14 @@ a client sends on the skipped routes, so it can't be spoofed through them.
 eze:
 
 ```sh
-EZE_DOMAIN=eze.page EZE_AUTH=header EZE_ADDR=127.0.0.1:8080 \
+EZE_DOMAIN=eze.example.com EZE_AUTH=header EZE_ADDR=127.0.0.1:8080 \
 EZE_TRUSTED_PROXIES=127.0.0.1/32 eze serve
 ```
 
 ### Cloudflare Access
 
 Set `EZE_AUTH_EMAIL_HEADER=Cf-Access-Authenticated-User-Email`. Add a second Access application
-for the path `eze.page/_q/api/` with a Bypass policy so the CLI's token reaches eze.
+for the path `eze.example.com/_q/api/` with a Bypass policy so the CLI's token reaches eze.
 Restrict `EZE_TRUSTED_PROXIES` to the address `cloudflared` connects from (usually `127.0.0.1/32`).
 
 ### Tailscale Serve
@@ -96,7 +96,7 @@ Set `EZE_AUTH_EMAIL_HEADER=Tailscale-User-Login` and `EZE_AUTH_NAME_HEADER=Tails
 ```sh
 docker build -t eze .
 docker run -d -p 127.0.0.1:8080:8080 -v eze-data:/data \
-  -e EZE_DOMAIN=eze.page -e EZE_AUTH=oidc ... eze
+  -e EZE_DOMAIN=eze.example.com -e EZE_AUTH=oidc ... eze
 ```
 
 In header mode with Docker, connections arrive from the Docker bridge, so set
