@@ -66,8 +66,36 @@ const unsubscribe = posts.subscribe({
 });
 ```
 
-Use this for live updates across everyone viewing the site (polls, boards, chat, games).
-Load the initial state with `list()`, then apply events.
+Use this for live updates to saved data (polls, boards, chat history). Load the initial state
+with `list()`, then apply events. For live state that doesn't need saving, use rooms.
+
+### Rooms (multiplayer)
+
+For things that don't need saving: cursors, typing indicators, live reactions, game moves,
+WebRTC signalling. Each browser tab is a peer; everyone's signed-in identity comes for free.
+
+```js
+const room = eze.ws.join('lobby', { state: { color: 'tomato' } }); // state is optional
+
+room.on('ready', (peers) => {});          // connected (also after reconnects): full list, re-render from it
+room.on('join', (peer) => {});            // peer: { id, user: { email, name }, state }
+room.on('leave', (peer) => {});
+room.on('presence', (peer) => {});        // someone's state changed
+room.on('message', (data, peer) => {});
+
+room.send({ emoji: '🎉' });               // to everyone else
+room.sendTo(peer.id, { offer });          // to one peer
+room.setState({ x, y });                  // your presence; safe to call on every mousemove
+room.peers;                               // Map of the other peers by id
+room.id;                                  // your own peer id
+room.leave();
+```
+
+Messages are relayed live and never stored: anyone who joins later won't see earlier ones.
+Keep durable things (scores, chat history) in the database, and use rooms for the live layer.
+Limits: 200 peers per room, 64 KB per message, about 50 messages per second per tab (extra
+messages are dropped, so throttle anything you send in a loop). The connection reconnects by
+itself; your peer id changes when it does, and `ready` fires again.
 
 ### Files
 

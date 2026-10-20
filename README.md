@@ -1,8 +1,8 @@
 # eze
 
 Drop in a folder of HTML and get back a private URL that only people in your organisation can open.
-No frameworks, pipelines or config files. Need data? Every site gets a database, realtime updates, file uploads and
-the viewer's identity through a tiny browser SDK, with nothing to set up.
+No frameworks, pipelines or config files. Need data? Every site gets a database, realtime updates, file uploads,
+multiplayer rooms and the viewer's identity through a tiny browser SDK, with nothing to set up.
 
 An open-source take on the idea behind Shopify's internal [Quick](https://shopify.engineering/quick) platform.
 
@@ -37,6 +37,9 @@ no spam, no abuse, no API keys in the browser. eze leans into that:
   const drafts = await posts.find({ status: 'draft' });
   posts.subscribe({ onCreate: (doc) => console.log('new', doc) });
   const photo = await eze.files.upload(input.files[0]);  // { id, name, url, size, ... }
+  const room = eze.ws.join('lobby');                     // multiplayer: messages + presence
+  room.on('presence', (peer) => drawCursor(peer.user.name, peer.state));
+  document.onmousemove = (e) => room.setState({ x: e.clientX, y: e.clientY });
 </script>
 ```
 
@@ -116,8 +119,6 @@ The site name comes from `--site`, then `eze.json`, then the directory name. Hid
 ## Roadmap
 
 - AI proxy with server-held keys (`eze.ai`)
-- Websocket rooms and presence for multiplayer (`eze.ws`)
-- Read-only data warehouse queries
 
 ## License
 

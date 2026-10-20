@@ -26,6 +26,15 @@
 
   const enc = encodeURIComponent;
 
+  function wsURL(path) {
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/_q' + path;
+  }
+
+  // backoff returns the reconnect delay for attempt n: exponential, capped at 30s, with jitter.
+  function backoff(n) {
+    return Math.min(30000, 500 * 2 ** Math.min(n, 6)) * (0.5 + Math.random() / 2);
+  }
+
   class Collection {
     constructor(name) {
       this.name = name;
@@ -78,7 +87,7 @@
     // subscribe({ onCreate(doc), onUpdate(doc), onDelete(id), onReconnect() }) returns an unsubscribe function.
     // onReconnect fires after a dropped connection comes back; refetch there, since events may have been missed.
     subscribe(handlers = {}) {
-      const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/_q/subscribe/' + enc(this.name);
+      const url = wsURL('/subscribe/' + enc(this.name));
       let ws;
       let closed = false;
       let attempt = 0;
@@ -100,8 +109,7 @@
         ws.onclose = () => {
           if (closed) return;
           attempt++;
-          const delay = Math.min(30000, 500 * 2 ** Math.min(attempt, 6)) * (0.5 + Math.random() / 2);
-          timer = setTimeout(connect, delay);
+          timer = setTimeout(connect, backoff(attempt));
         };
       };
       connect();
@@ -128,6 +136,152 @@
     me() {
       if (!mePromise) mePromise = request('GET', '/me').catch((err) => { mePromise = undefined; throw err; });
       return mePromise;
+    },
+  };
+
+  // Room is a live channel between everyone on the page: messages plus presence.
+  // Peers are { id, user: { email, name }, state }. Each browser tab is its own peer.
+  class Room {
+    constructor(name, opts = {}) {
+      this.name = name;
+      this.id = null;           // this tab's peer id, set once connected
+      this.peers = new Map();   // the other peers, by id
+      this.state = opts.state === undefined ? null : opts.state;
+      this._handlers = {};
+      this._queue = [];
+      this._closed = false;
+      this._attempt = 0;
+      this._stateTimer = null;
+      this._stateDirty = false;
+      this._connect();
+    }
+
+    // on('ready' | 'join' | 'leave' | 'presence' | 'message' | 'disconnect' | 'error', fn) returns an off function.
+    //   ready(peers)          connected (again); peers is the full list, so re-render from it
+    //   join(peer) / leave(peer) / presence(peer)
+    //   message(data, peer)
+    on(event, fn) {
+      (this._handlers[event] = this._handlers[event] || []).push(fn);
+      return () => this.off(event, fn);
+    }
+
+    off(event, fn) {
+      this._handlers[event] = (this._handlers[event] || []).filter((h) => h !== fn);
+    }
+
+    // send(data) delivers data to every other peer.
+    send(data) {
+      this._send({ type: 'message', data });
+    }
+
+    // sendTo(peerId, data) delivers data to one peer, e.g. for WebRTC signalling.
+    sendTo(peerId, data) {
+      this._send({ type: 'message', to: peerId, data });
+    }
+
+    // setState(state) replaces this tab's presence state (cursor, selection, status...).
+    // Calls are coalesced to at most 20 per second, always ending with the latest state.
+    setState(state) {
+      this.state = state;
+      if (this._stateTimer) {
+        this._stateDirty = true;
+        return;
+      }
+      this._send({ type: 'presence', state });
+      this._stateTimer = setTimeout(() => {
+        this._stateTimer = null;
+        if (this._stateDirty) {
+          this._stateDirty = false;
+          this.setState(this.state);
+        }
+      }, 50);
+    }
+
+    leave() {
+      this._closed = true;
+      clearTimeout(this._timer);
+      clearTimeout(this._stateTimer);
+      if (this._ws) this._ws.close();
+    }
+
+    _emit(event, ...args) {
+      for (const fn of this._handlers[event] || []) {
+        try { fn(...args); } catch (err) { console.error(err); }
+      }
+    }
+
+    // _send queues messages until connected, keeping at most the last 100.
+    _send(msg) {
+      if (this._ws && this._ws.readyState === WebSocket.OPEN && this.id) {
+        this._ws.send(JSON.stringify(msg));
+        return;
+      }
+      if (msg.type === 'presence') {
+        return; // the current state is sent on connect anyway
+      }
+      this._queue.push(msg);
+      if (this._queue.length > 100) this._queue.shift();
+    }
+
+    _connect() {
+      const ws = new WebSocket(wsURL('/ws/' + enc(this.name)));
+      this._ws = ws;
+      ws.onmessage = (msg) => {
+        let ev;
+        try { ev = JSON.parse(msg.data); } catch { return; }
+        switch (ev.type) {
+          case 'welcome': {
+            this.id = ev.id;
+            this._attempt = 0;
+            this.peers = new Map(ev.peers.map((p) => [p.id, p]));
+            if (this.state !== null) ws.send(JSON.stringify({ type: 'presence', state: this.state }));
+            const queued = this._queue;
+            this._queue = [];
+            queued.forEach((m) => ws.send(JSON.stringify(m)));
+            this._emit('ready', [...this.peers.values()]);
+            break;
+          }
+          case 'join':
+            this.peers.set(ev.peer.id, ev.peer);
+            this._emit('join', ev.peer);
+            break;
+          case 'leave': {
+            const peer = this.peers.get(ev.id) || { id: ev.id, user: null, state: null };
+            this.peers.delete(ev.id);
+            this._emit('leave', peer);
+            break;
+          }
+          case 'presence': {
+            const peer = this.peers.get(ev.id);
+            if (peer) {
+              peer.state = ev.state;
+              this._emit('presence', peer);
+            }
+            break;
+          }
+          case 'message':
+            this._emit('message', ev.data, this.peers.get(ev.from) || { id: ev.from, user: null, state: null });
+            break;
+          case 'error':
+            this._emit('error', new EzeError(0, ev.error));
+            break;
+        }
+      };
+      ws.onclose = () => {
+        const wasConnected = this.id !== null;
+        this.id = null;
+        if (wasConnected) this._emit('disconnect');
+        if (this._closed) return;
+        this._attempt++;
+        this._timer = setTimeout(() => this._connect(), backoff(this._attempt));
+      };
+    }
+  }
+
+  const ws = {
+    // join(name, { state }) connects to a room on this site and returns a Room.
+    join(name, opts) {
+      return new Room(name, opts);
     },
   };
 
@@ -182,6 +336,7 @@
     db,
     id,
     files,
+    ws,
     EzeError,
   };
 })();
