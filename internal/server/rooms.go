@@ -197,30 +197,29 @@ func (rs *rooms) dropSite(site string) {
 	}
 }
 
-// handleRoom connects a browser to a room over a websocket.
+// handleRoom connects a browser to a room over a websocket. Messages are JSON objects:
 //
-// Client to server:  {"type":"message","data":any,"to"?:peerId}  {"type":"presence","state":any}
-// Server to client:  welcome {id, peers}, join {peer}, leave {id}, presence {id, state},
-//
-//	message {from, data}, error {error}
+//	client to server: message {data, to?}, presence {state}
+//	server to client: welcome {id, peers}, join {peer}, leave {id}, presence {id, state},
+//	                  message {from, data}, error {error}
 func (s *Server) handleRoom(w http.ResponseWriter, r *http.Request) {
 	room := r.PathValue("room")
 	if !store.ValidCollection(room) {
 		writeErr(w, http.StatusBadRequest, "room names may only contain letters, digits, - and _ (max 64)")
 		return
 	}
-	p, err := s.rooms.join(siteFrom(r.Context()), room, auth.UserFrom(r.Context()))
-	if errors.Is(err, errRoomFull) {
-		writeErr(w, http.StatusServiceUnavailable, "room is full")
-		return
-	}
-	// Accept rejects cross-origin upgrades by default, so other sites can't join this site's rooms.
+	// Accept first: it rejects cross-origin upgrades, and only then may the viewer be
+	// announced to the room.
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
-		s.rooms.leave(p)
 		return
 	}
 	defer conn.CloseNow()
+	p, err := s.rooms.join(siteFrom(r.Context()), room, auth.UserFrom(r.Context()))
+	if errors.Is(err, errRoomFull) {
+		conn.Close(websocket.StatusTryAgainLater, "room is full")
+		return
+	}
 	defer s.rooms.leave(p)
 	conn.SetReadLimit(maxRoomMessage)
 

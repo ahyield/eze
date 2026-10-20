@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -116,7 +117,17 @@ func (e *env) do(r req) *httptest.ResponseRecorder {
 
 func (e *env) deploy(site, as string, files map[string]string) *httptest.ResponseRecorder {
 	e.t.Helper()
-	return e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/" + site, as: as, body: bytes.NewReader(testutil.Files(e.t, files))})
+	return e.do(req{method: "PUT", url: "https://eze.test/_q/sites/" + site, as: as, body: bytes.NewReader(testutil.Files(e.t, files))})
+}
+
+// bearer mints an API token for email and returns the header that carries it.
+func (e *env) bearer(email string) map[string]string {
+	e.t.Helper()
+	token, hash := auth.NewToken()
+	if err := e.store.CreateToken(context.Background(), hash, email, email, "test"); err != nil {
+		e.t.Fatal(err)
+	}
+	return map[string]string{"Authorization": "Bearer " + token}
 }
 
 func decode[T any](t *testing.T, w *httptest.ResponseRecorder) T {
@@ -194,7 +205,7 @@ func TestDeployListDelete(t *testing.T) {
 	if w := e.deploy("blog", bo, map[string]string{"index.html": "v2"}); w.Code != 200 {
 		t.Fatalf("overwrite = %d %s", w.Code, w.Body)
 	}
-	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/sites", as: ana}))
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/sites", headers: e.bearer(ana)}))
 	if len(list) != 1 || list[0]["deployed_by"] != bo || list[0]["owner"] != ana {
 		t.Errorf("list = %v", list)
 	}
@@ -203,7 +214,7 @@ func TestDeployListDelete(t *testing.T) {
 	}
 
 	e.do(req{method: "POST", url: "https://blog.eze.test/_q/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})})
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: bo}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 204 {
 		t.Fatalf("delete = %d %s", w.Code, w.Body)
 	}
 	if w := e.do(req{url: "https://blog.eze.test/", as: ana}); w.Code != 404 {
@@ -212,7 +223,7 @@ func TestDeployListDelete(t *testing.T) {
 	if docs := decode[[]any](t, e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana})); len(docs) != 0 {
 		t.Errorf("deleted site still has docs: %v", docs)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: bo}); w.Code != 404 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 404 {
 		t.Errorf("delete again = %d", w.Code)
 	}
 }
@@ -225,13 +236,13 @@ func TestDeployErrors(t *testing.T) {
 	if w := e.deploy("Bad_Name", ana, map[string]string{"index.html": "x"}); w.Code != 400 {
 		t.Errorf("invalid name = %d", w.Code)
 	}
-	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", as: ana, body: strings.NewReader("not a tarball")}); w.Code != 400 {
+	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: strings.NewReader("not a tarball")}); w.Code != 400 {
 		t.Errorf("bad archive = %d", w.Code)
 	}
 	noise := make([]byte, 8<<10) // random bytes don't compress, so the archive exceeds 512 bytes
 	rand.Read(noise)
 	big := testutil.Files(t, map[string]string{"blob.bin": string(noise)})
-	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", as: ana, body: bytes.NewReader(big)}); w.Code != 413 {
+	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: bytes.NewReader(big)}); w.Code != 413 {
 		t.Errorf("too large = %d %s", w.Code, w.Body)
 	}
 }
@@ -244,7 +255,7 @@ func TestOwnerPolicy(t *testing.T) {
 	if w := e.deploy("blog", bo, map[string]string{"index.html": "v2"}); w.Code != 403 {
 		t.Errorf("non-owner deploy = %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: bo}); w.Code != 403 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 403 {
 		t.Errorf("non-owner delete = %d", w.Code)
 	}
 	if w := e.deploy("blog", ana, map[string]string{"index.html": "v3"}); w.Code != 200 {
@@ -267,10 +278,42 @@ func TestTokenAuth(t *testing.T) {
 	if me := decode[map[string]any](t, w); me["email"] != ana || me["name"] != "Ana" {
 		t.Errorf("me = %v", me)
 	}
-	w = e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", headers: bearer, remote: "203.0.113.7:1234",
+	w = e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", headers: bearer, remote: "203.0.113.7:1234",
 		body: bytes.NewReader(testutil.Files(t, map[string]string{"index.html": "x"}))})
 	if w.Code != 200 {
 		t.Errorf("token deploy = %d %s", w.Code, w.Body)
+	}
+}
+
+// The docs tell operators to let /_q/api/ past their auth proxy for the CLI, so identity
+// headers there may come straight from a client. Only tokens count on those routes.
+func TestAPIRoutesRequireToken(t *testing.T) {
+	e := newEnv(t)
+	archive := testutil.Files(t, map[string]string{"index.html": "x"})
+	for _, r := range []req{
+		{url: "https://eze.test/_q/api/me", as: ana},
+		{url: "https://eze.test/_q/api/sites", as: ana},
+		{method: "PUT", url: "https://eze.test/_q/api/sites/blog", as: ana, body: bytes.NewReader(archive)},
+		{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: ana},
+	} {
+		if w := e.do(r); w.Code != 401 {
+			t.Errorf("%s %s with a proxy header = %d, want 401", r.method, r.url, w.Code)
+		}
+	}
+	if e.srv.sites.Exists("blog") {
+		t.Fatal("header identity deployed through /_q/api/")
+	}
+	w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", headers: e.bearer(ana), body: bytes.NewReader(archive)})
+	if w.Code != 200 {
+		t.Errorf("token deploy = %d %s", w.Code, w.Body)
+	}
+	// The dashboard's routes use normal sign-in.
+	if w := e.deploy("blog", bo, map[string]string{"index.html": "y"}); w.Code != 200 {
+		t.Errorf("dashboard deploy = %d %s", w.Code, w.Body)
+	}
+	// Site APIs keep working with normal sign-in.
+	if w := e.do(req{url: "https://blog.eze.test/_q/me", as: ana}); w.Code != 200 {
+		t.Errorf("site /_q/me = %d", w.Code)
 	}
 }
 
@@ -300,7 +343,7 @@ func TestCrossOriginWrites(t *testing.T) {
 	}
 	// Deleting a site from another site's page is blocked too.
 	e.deploy("blog", ana, map[string]string{"index.html": "x"})
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 403 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 403 {
 		t.Errorf("cross-origin site delete = %d", w.Code)
 	}
 }
@@ -443,14 +486,22 @@ func TestCLIAuthorize(t *testing.T) {
 	form := url.Values{"port": {"50123"}, "state": {state}}.Encode()
 	formHeaders := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
 	w := e.do(req{method: "POST", url: "https://eze.test/_q/cli/authorize", as: ana, headers: formHeaders, body: strings.NewReader(form)})
-	if w.Code != http.StatusSeeOther {
+	if w.Code != 200 {
 		t.Fatalf("authorize = %d %s", w.Code, w.Body)
 	}
-	loc, _ := url.Parse(w.Header().Get("Location"))
-	if loc.Host != "127.0.0.1:50123" || loc.Path != "/callback" || loc.Query().Get("state") != state {
-		t.Errorf("redirect = %s", loc)
+	// The token goes to the CLI in a self-submitting POST form, never in a URL.
+	body := w.Body.String()
+	if w.Header().Get("Location") != "" || !strings.Contains(body, `action="http://127.0.0.1:50123/callback"`) || !strings.Contains(body, `method="post"`) {
+		t.Fatalf("hand-off page = %s", body)
 	}
-	token := loc.Query().Get("token")
+	if !strings.Contains(body, `name="state" value="`+state+`"`) {
+		t.Error("state missing from hand-off")
+	}
+	m := regexp.MustCompile(`name="token" value="(eze_[A-Za-z0-9_-]+)"`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("token missing from hand-off")
+	}
+	token := m[1]
 	w = e.do(req{url: "https://eze.test/_q/api/me", headers: map[string]string{"Authorization": "Bearer " + token}, remote: "203.0.113.7:1"})
 	if me := decode[map[string]any](t, w); me["email"] != ana {
 		t.Errorf("minted token me = %v", me)
@@ -463,8 +514,6 @@ func TestCLIAuthorize(t *testing.T) {
 		t.Errorf("cross-origin authorize = %d", w.Code)
 	}
 }
-
-// Realtime
 
 // dialer routes every connection to the test server, whatever host the URL names.
 func dialer(ts *httptest.Server) *http.Client {

@@ -166,6 +166,9 @@ func (s *Server) handleCLIAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("cli token issued", "by", user.Email)
-	q := url.Values{"token": {token}, "state": {state}}
-	http.Redirect(w, r, "http://127.0.0.1:"+strconv.Itoa(port)+"/callback?"+q.Encode(), http.StatusSeeOther)
+	s.render(w, http.StatusOK, "cli-done.html", map[string]any{
+		"Callback": "http://127.0.0.1:" + strconv.Itoa(port) + "/callback",
+		"Token":    token,
+		"State":    state,
+	})
 }

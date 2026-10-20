@@ -87,14 +87,15 @@ func serve() error {
 		authn = &auth.Header{EmailHeader: cfg.EmailHeader, NameHeader: cfg.NameHeader, TrustedProxies: cfg.TrustedProxies}
 	case config.AuthOIDC:
 		authn, err = auth.NewOIDC(ctx, auth.OIDCConfig{
-			Issuer:         cfg.OIDCIssuer,
-			ClientID:       cfg.OIDCClientID,
-			ClientSecret:   cfg.OIDCClientSecret,
-			AllowedDomains: cfg.AllowedEmailDomains,
-			Secret:         cfg.SessionSecret,
-			Domain:         cfg.Domain,
-			CookieDomain:   cfg.CookieDomain(),
-			Scheme:         cfg.Scheme,
+			Issuer:               cfg.OIDCIssuer,
+			ClientID:             cfg.OIDCClientID,
+			ClientSecret:         cfg.OIDCClientSecret,
+			AllowedDomains:       cfg.AllowedEmailDomains,
+			AllowUnverifiedEmail: cfg.AllowUnverifiedEmail,
+			Secret:               cfg.SessionSecret,
+			Domain:               cfg.Domain,
+			CookieDomain:         cfg.CookieDomain(),
+			Scheme:               cfg.Scheme,
 		})
 		if err != nil {
 			return fmt.Errorf("oidc: %w", err)

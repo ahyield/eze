@@ -191,7 +191,7 @@ func TestUploadsSurviveRedeployAndDieWithSite(t *testing.T) {
 	if w := e.do(req{url: "https://blog.eze.test" + f["url"].(string), as: ana}); w.Body.String() != "hello" {
 		t.Errorf("upload lost on redeploy: %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: ana}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana}); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
 	if w := e.do(req{url: "https://blog.eze.test" + f["url"].(string), as: ana}); w.Code != 404 {

@@ -60,6 +60,16 @@ The full reference is what `eze init` writes into [AGENTS.md](internal/cli/templ
 Each site's data is isolated to that site. API calls are same-origin, authenticated by the
 viewer's existing session, and rate limited per user.
 
+## Install
+
+One binary is both the server and the CLI. With Go 1.24 or newer:
+
+```sh
+go install github.com/ahyield/eze/cmd/eze@latest
+```
+
+Or build the server image with `docker build -t eze .` (see [docs/deploy.md](docs/deploy.md)).
+
 ## Run it
 
 You need a domain with a wildcard DNS record (`eze.example.com` and `*.eze.example.com`
@@ -88,6 +98,7 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_OIDC_ISSUER`, `EZE_OIDC_CLIENT_ID`, `EZE_OIDC_CLIENT_SECRET` | | OIDC client. Redirect URI: `https://<EZE_DOMAIN>/_q/auth/callback`. |
 | `EZE_OIDC_ALLOWED_DOMAINS` | | Comma-separated email domains allowed to sign in. Required for OIDC. |
 | `EZE_OIDC_ALLOW_PUBLIC_DOMAINS` | | Set to `true` to allow public email domains (gmail.com...) above. You almost certainly don't want this. |
+| `EZE_OIDC_ALLOW_UNVERIFIED_EMAIL` | | Set to `true` for providers that never send `email_verified` (e.g. Entra ID). Only safe if users can't edit their own email there. |
 | `EZE_SESSION_SECRET` | | Base64, at least 32 bytes (`openssl rand -base64 32`). Required for OIDC. |
 | `EZE_AUTH_EMAIL_HEADER` | `X-Forwarded-Email` | Header mode: email header. |
 | `EZE_AUTH_NAME_HEADER` | `X-Forwarded-User` | Header mode: display name header. |

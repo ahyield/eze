@@ -46,8 +46,6 @@ func nameFromEmail(email string) string {
 	return local
 }
 
-// Tokens
-
 const tokenPrefix = "eze_"
 
 // NewToken returns a random API token and the hash to store for it.

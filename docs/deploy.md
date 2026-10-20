@@ -52,8 +52,10 @@ eze trusts that header **only** when the TCP connection comes from `EZE_TRUSTED_
 Make sure nothing else can reach eze's port directly.
 
 The CLI authenticates with an eze API token (`Authorization: Bearer eze_...`), which your
-proxy does not understand. Let requests to `/_q/api/` through without proxy auth; eze
-checks the token itself, and rejects them if the token is missing.
+proxy does not understand. Let requests to `/_q/api/` through without proxy auth. eze only
+accepts API tokens on `/_q/api/`: identity headers and cookies are ignored there, so a client
+can't sign itself in by sending its own `X-Forwarded-Email` on that path. Everything else,
+including the dashboard, must stay behind the proxy.
 
 ### oauth2-proxy
 

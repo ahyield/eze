@@ -35,10 +35,13 @@ type OIDCConfig struct {
 	ClientID       string
 	ClientSecret   string
 	AllowedDomains []string // lower-case email domains allowed to sign in
-	Secret         []byte   // HMAC key for cookies
-	Domain         string   // apex host, may include a port
-	CookieDomain   string   // apex hostname without port
-	Scheme         string
+	// AllowUnverifiedEmail accepts sign-ins without email_verified=true, for providers that
+	// never send the claim. Only safe if users can't change their own email there.
+	AllowUnverifiedEmail bool
+	Secret               []byte // HMAC key for cookies
+	Domain               string // apex host, may include a port
+	CookieDomain         string // apex hostname without port
+	Scheme               string
 }
 
 // OIDC signs users in with any OpenID Connect provider (Google Workspace, Okta, Entra ID, Keycloak...)
@@ -164,7 +167,7 @@ func (o *OIDC) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	var claims struct {
 		Email         string `json:"email"`
-		EmailVerified *bool  `json:"email_verified"`
+		EmailVerified any    `json:"email_verified"`
 		Name          string `json:"name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
@@ -173,8 +176,13 @@ func (o *OIDC) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	email := strings.ToLower(claims.Email)
 	_, domain, _ := strings.Cut(email, "@")
-	if email == "" || (claims.EmailVerified != nil && !*claims.EmailVerified) || !slices.Contains(o.cfg.AllowedDomains, domain) {
+	if email == "" || !slices.Contains(o.cfg.AllowedDomains, domain) {
 		http.Error(w, "This account is not allowed to use eze.", http.StatusForbidden)
+		return
+	}
+	if !o.cfg.AllowUnverifiedEmail && !emailVerified(claims.EmailVerified) {
+		slog.Warn("oidc sign-in without a verified email", "email", email)
+		http.Error(w, "Your identity provider did not confirm this email address is verified.", http.StatusForbidden)
 		return
 	}
 	name := claims.Name
@@ -198,6 +206,17 @@ func (o *OIDC) callback(w http.ResponseWriter, r *http.Request) {
 func (o *OIDC) logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Domain: o.cfg.CookieDomain, Path: "/", MaxAge: -1})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// emailVerified reads the email_verified claim, which some providers send as a string.
+func emailVerified(claim any) bool {
+	switch v := claim.(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	}
+	return false
 }
 
 // safeRedirect only allows redirects back to the apex or one of its sites.

@@ -22,7 +22,6 @@ import (
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// Reserved names can't be deployed to.
 var reserved = map[string]bool{"www": true, "api": true, "admin": true, "auth": true, "login": true, "static": true}
 
 func ValidName(name string) bool { return nameRe.MatchString(name) && !reserved[name] }
@@ -178,14 +177,16 @@ type writer struct {
 	dst      string
 	maxFiles int
 	maxBytes int64
-	files    int
+	files    int // regular files, as reported for the site
+	entries  int // files and folders, which both count toward maxFiles
 	total    int64
 }
 
 func (w *writer) add(rel string, r io.Reader) error {
 	w.files++
-	if w.files > w.maxFiles {
-		return deployErr("site has more than %d files", w.maxFiles)
+	w.entries++
+	if w.entries > w.maxFiles {
+		return deployErr("site has more than %d files and folders", w.maxFiles)
 	}
 	full := filepath.Join(w.dst, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -217,7 +218,10 @@ func (w *writer) tarGz(r io.Reader) error {
 		return readErr(err)
 	}
 	defer gz.Close()
-	tr := tar.NewReader(gz)
+	// Everything decompressed counts, including headers and skipped entries, so a small
+	// upload can't make the server inflate gigabytes it then throws away.
+	limit := w.maxBytes + int64(w.maxFiles+1)*1024 + 1<<20
+	tr := tar.NewReader(&capReader{r: gz, left: limit})
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -238,6 +242,10 @@ func (w *writer) tarGz(r io.Reader) error {
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
+			w.entries++ // directories cost inodes too
+			if w.entries > w.maxFiles {
+				return deployErr("site has more than %d files and folders", w.maxFiles)
+			}
 			if err := os.MkdirAll(filepath.Join(w.dst, filepath.FromSlash(rel)), 0o755); err != nil {
 				return deployErr("conflicting paths in archive at %q", rel)
 			}
@@ -249,6 +257,24 @@ func (w *writer) tarGz(r io.Reader) error {
 			// Symlinks, devices and the like are silently skipped: a site is just files.
 		}
 	}
+}
+
+// capReader fails once more than left bytes have been read.
+type capReader struct {
+	r    io.Reader
+	left int64
+}
+
+func (c *capReader) Read(p []byte) (int, error) {
+	if c.left <= 0 {
+		return 0, deployErr("archive expands to more data than a site may hold")
+	}
+	if int64(len(p)) > c.left {
+		p = p[:c.left]
+	}
+	n, err := c.r.Read(p)
+	c.left -= int64(n)
+	return n, err
 }
 
 // zip handles archives made by "Compress" in Finder or Explorer, or downloaded from

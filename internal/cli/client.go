@@ -58,7 +58,11 @@ func saveConfig(c *Config) (string, error) {
 		return "", err
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
-	return p, os.WriteFile(p, append(b, '\n'), 0o600)
+	if err := os.WriteFile(p, append(b, '\n'), 0o600); err != nil {
+		return "", err
+	}
+	// WriteFile keeps an existing file's mode; the token must stay private either way.
+	return p, os.Chmod(p, 0o600)
 }
 
 type client struct {

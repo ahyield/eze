@@ -25,7 +25,7 @@ const (
 type Config struct {
 	Addr    string
 	Domain  string // apex host, e.g. "eze.example.com" or "localhost:8080"; sites live at <site>.<Domain>
-	Scheme  string // "https" or "http"
+	Scheme  string
 	DataDir string
 
 	AuthMode string
@@ -36,11 +36,12 @@ type Config struct {
 	TrustedProxies []netip.Prefix
 
 	// OIDC mode.
-	OIDCIssuer          string
-	OIDCClientID        string
-	OIDCClientSecret    string
-	AllowedEmailDomains []string
-	SessionSecret       []byte
+	OIDCIssuer           string
+	OIDCClientID         string
+	OIDCClientSecret     string
+	AllowedEmailDomains  []string
+	AllowUnverifiedEmail bool
+	SessionSecret        []byte
 
 	// Dev mode: a fixed identity, loopback only.
 	DevEmail string
@@ -165,6 +166,7 @@ func Load() (*Config, error) {
 				}
 			}
 		}
+		c.AllowUnverifiedEmail = env("EZE_OIDC_ALLOW_UNVERIFIED_EMAIL", "") == "true"
 		secret, err := base64.StdEncoding.DecodeString(env("EZE_SESSION_SECRET", ""))
 		if err != nil || len(secret) < 32 {
 			return nil, errors.New("oidc auth requires EZE_SESSION_SECRET: at least 32 random bytes, base64 encoded (openssl rand -base64 32)")

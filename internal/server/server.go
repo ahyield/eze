@@ -69,6 +69,9 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	s.apex.HandleFunc("GET /_q/api/sites", s.handleListSites)
 	s.apex.HandleFunc("PUT /_q/api/sites/{name}", s.handleDeploy)
 	s.apex.HandleFunc("DELETE /_q/api/sites/{name}", s.handleDeleteSite)
+	// The dashboard's own routes: behind normal sign-in, unlike /_q/api/ (see identify).
+	s.apex.HandleFunc("PUT /_q/sites/{name}", s.handleDeploy)
+	s.apex.HandleFunc("DELETE /_q/sites/{name}", s.handleDeleteSite)
 
 	s.site.HandleFunc("GET /_q/sdk.js", s.handleSDK)
 	s.site.HandleFunc("GET /_q/me", s.handleMe)
@@ -142,8 +145,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mux.ServeHTTP(w, r.WithContext(auth.WithUser(r.Context(), user)))
 }
 
+// identify returns the user making r. The CLI's /_q/api/ routes accept only API tokens:
+// operators are told to let /_q/api/ past their auth proxy, so identity headers or cookies
+// arriving there must not count.
 func (s *Server) identify(r *http.Request) *auth.User {
-	if token, ok := auth.BearerToken(r); ok {
+	token, hasToken := auth.BearerToken(r)
+	if !hasToken && strings.ToLower(r.Host) == s.cfg.Domain && strings.HasPrefix(r.URL.Path, "/_q/api/") {
+		return nil
+	}
+	if hasToken {
 		owner, err := s.store.LookupToken(r.Context(), auth.HashToken(token))
 		if err != nil {
 			if !errors.Is(err, store.ErrNotFound) {
@@ -195,6 +205,7 @@ func siteFrom(ctx context.Context) string {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }

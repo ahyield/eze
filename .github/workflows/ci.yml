@@ -24,3 +24,10 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: docker build -t eze .
+      - name: docker smoke test
+        run: |
+          docker volume create eze-data
+          docker run -d --name eze -p 8080:8080 -v eze-data:/data -e EZE_DOMAIN=localhost:8080 -e EZE_AUTH=header eze
+          for i in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && exit 0; sleep 1; done
+          docker logs eze
+          exit 1

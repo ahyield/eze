@@ -209,7 +209,26 @@ func TestRoomsDropSite(t *testing.T) {
 	}
 }
 
-// Over a real websocket
+// waitPeers waits until the server's rooms hold n peers in total.
+func waitPeers(t *testing.T, e *env, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		e.srv.rooms.mu.Lock()
+		got := 0
+		for _, members := range e.srv.rooms.rooms {
+			got += len(members)
+		}
+		e.srv.rooms.mu.Unlock()
+		if got == n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("rooms hold %d peers, want %d", got, n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 func serve(t *testing.T, e *env) *httptest.Server {
 	t.Helper()
@@ -310,6 +329,8 @@ func TestRoomWebsocketRejects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	watcher := dialRoom(t, e, client, "blog", "lobby", bo)
+	read(t, watcher) // welcome
 	_, res, err := websocket.Dial(ctx, "ws://blog.eze.test/_q/ws/lobby", &websocket.DialOptions{
 		HTTPClient: client,
 		HTTPHeader: http.Header{"X-Email": {ana}, "Origin": {"https://evil.eze.test"}},
@@ -317,6 +338,14 @@ func TestRoomWebsocketRejects(t *testing.T) {
 	if err == nil || (res != nil && res.StatusCode != http.StatusForbidden) {
 		t.Errorf("cross-origin join: err=%v", err)
 	}
+	// The rejected viewer must never have been announced to the room.
+	rctx, rcancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer rcancel()
+	if _, msg, err := watcher.Read(rctx); err == nil {
+		t.Errorf("room saw a rejected cross-origin viewer: %s", msg)
+	}
+	watcher.Close(websocket.StatusNormalClosure, "")
+	waitPeers(t, e, 0)
 	_, res, err = websocket.Dial(ctx, "ws://blog.eze.test/_q/ws/lobby", &websocket.DialOptions{HTTPClient: client})
 	if err == nil || (res != nil && res.StatusCode != http.StatusUnauthorized) {
 		t.Errorf("anonymous join: err=%v", err)
@@ -328,9 +357,7 @@ func TestRoomWebsocketRejects(t *testing.T) {
 	if w := e.do(req{url: "https://blog.eze.test/_q/ws/lobby", as: ana}); w.Code == http.StatusSwitchingProtocols {
 		t.Fatal("plain GET upgraded")
 	}
-	if len(e.srv.rooms.rooms) != 0 {
-		t.Errorf("ghost peers: %v", e.srv.rooms.rooms)
-	}
+	waitPeers(t, e, 0)
 }
 
 func TestRoomMessageTooLarge(t *testing.T) {
@@ -352,7 +379,7 @@ func TestRoomsDroppedWithSite(t *testing.T) {
 	e.deploy("blog", ana, map[string]string{"index.html": "x"})
 	a := dialRoom(t, e, client, "blog", "lobby", ana)
 	read(t, a)
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/sites/blog", as: ana}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana}); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

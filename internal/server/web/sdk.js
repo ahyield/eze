@@ -52,7 +52,6 @@
       return request('GET', this.path + (qs ? '?' + qs : ''));
     }
 
-    // find(where) is list({ where }).
     find(where, opts = {}) {
       return this.list({ ...opts, where });
     }

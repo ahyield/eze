@@ -189,3 +189,14 @@ func TestDev(t *testing.T) {
 		t.Errorf("dev user = %+v", u)
 	}
 }
+
+func TestEmailVerified(t *testing.T) {
+	for claim, want := range map[any]bool{true: true, false: false, "true": true, "false": false, "": false, 1.0: false} {
+		if got := emailVerified(claim); got != want {
+			t.Errorf("emailVerified(%#v) = %v", claim, got)
+		}
+	}
+	if emailVerified(nil) {
+		t.Error("a missing claim must not count as verified")
+	}
+}

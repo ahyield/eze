@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -372,5 +373,27 @@ func TestDeployTarFromMacTar(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(s.dir("blog"), ".env")); !os.IsNotExist(err) {
 		t.Error(".env was extracted")
+	}
+}
+
+func TestDeployTarLimitsCountEverything(t *testing.T) {
+	var de *DeployError
+	// Directories count toward the file limit.
+	s, _ := NewStore(t.TempDir(), 1<<20, 3)
+	dirs := []testutil.Entry{}
+	for i := range 5 {
+		dirs = append(dirs, testutil.Entry{Name: fmt.Sprintf("d%d/", i), Type: tar.TypeDir})
+	}
+	if _, _, err := s.Deploy("blog", bytes.NewReader(testutil.TarGz(t, dirs...))); !errors.As(err, &de) {
+		t.Errorf("more folders than the limit: %v", err)
+	}
+	// Skipped entries still count toward how much may be decompressed.
+	s, _ = NewStore(t.TempDir(), 1000, 10)
+	huge := testutil.TarGz(t,
+		testutil.Entry{Name: "index.html", Body: "x"},
+		testutil.Entry{Name: "._junk", Body: strings.Repeat("0", 4<<20)},
+	)
+	if _, _, err := s.Deploy("blog", bytes.NewReader(huge)); !errors.As(err, &de) || !strings.Contains(err.Error(), "expands") {
+		t.Errorf("large skipped entry: %v", err)
 	}
 }

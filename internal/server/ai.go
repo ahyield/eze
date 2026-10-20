@@ -36,7 +36,7 @@ func (s *Server) aiEnabled(w http.ResponseWriter) bool {
 	return true
 }
 
-// validate fills in defaults and reports what's wrong with the request, if anything.
+// validateChat fills in defaults and reports what's wrong with the request, if anything.
 func (s *Server) validateChat(req *chatRequest) string {
 	if req.Model == "" {
 		req.Model = s.cfg.AIDefaultModel

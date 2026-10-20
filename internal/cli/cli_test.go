@@ -169,6 +169,10 @@ func TestConfigEnvOverride(t *testing.T) {
 	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "eze login") {
 		t.Errorf("no config = %v", err)
 	}
+	// A config left world-readable (e.g. by an older version or a manual edit) gets fixed on save.
+	p, _ := configPath()
+	os.MkdirAll(filepath.Dir(p), 0o755)
+	os.WriteFile(p, []byte("{}"), 0o644)
 	if _, err := saveConfig(&Config{Server: "https://eze.page/", Token: "eze_saved"}); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +184,6 @@ func TestConfigEnvOverride(t *testing.T) {
 	if c, _ := loadConfig(); c.Token != "eze_env" {
 		t.Errorf("env override = %+v", c)
 	}
-	p, _ := configPath()
 	if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Errorf("config file mode = %v, %v", fi.Mode().Perm(), err)
 	}

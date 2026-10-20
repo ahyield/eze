@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finishing sign-in</title>
+<link rel="stylesheet" href="/_q/app.css">
+</head>
+<body>
+<main style="max-width:420px;padding-top:15vh;text-align:center">
+  <p class="muted">Handing the sign-in to the eze CLI on this computer...</p>
+  <!-- A POST keeps the token out of browser history, unlike a redirect with it in the URL. -->
+  <form method="post" action="{{.Callback}}" id="handoff">
+    <input type="hidden" name="token" value="{{.Token}}">
+    <input type="hidden" name="state" value="{{.State}}">
+    <noscript><button class="btn primary" type="submit">Continue</button></noscript>
+  </form>
+</main>
+<script>document.getElementById('handoff').submit();</script>
+</body>
+</html>

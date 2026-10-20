@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"flag"
@@ -63,8 +64,12 @@ func Login(args []string) error {
 
 	tokens := make(chan string, 1)
 	srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		if r.URL.Path != "/callback" || q.Get("state") != state || q.Get("token") == "" {
+		if r.Method != http.MethodPost || r.URL.Path != "/callback" || r.ParseForm() != nil {
+			http.Error(w, "invalid login callback", http.StatusBadRequest)
+			return
+		}
+		q := r.PostForm
+		if subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(state)) != 1 || q.Get("token") == "" {
 			http.Error(w, "invalid login callback", http.StatusBadRequest)
 			return
 		}

@@ -108,6 +108,10 @@ func num(v any) string {
 func (s *Server) render(w http.ResponseWriter, status int, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// Sites share the session cookie, so one could frame the dashboard and trick clicks
+	// (deploy, delete, authorize the CLI). The dashboard is never framed.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	w.WriteHeader(status)
 	if err := templates.ExecuteTemplate(w, name, data); err != nil {
 		slog.Error("render", "template", name, "err", err)

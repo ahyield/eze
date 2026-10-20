@@ -169,7 +169,7 @@ func TestDeployZipThroughAPI(t *testing.T) {
 		testutil.Entry{Name: "Site/index.html", Body: "from a zip"},
 		testutil.Entry{Name: "__MACOSX/Site/._index.html", Body: "fork"},
 	)
-	w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/blog", as: ana, body: bytes.NewReader(zip),
+	w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: bytes.NewReader(zip),
 		headers: map[string]string{"Content-Type": "application/zip", "Origin": "https://eze.test", "Sec-Fetch-Site": "same-origin"}})
 	if w.Code != 200 {
 		t.Fatalf("zip deploy = %d %s", w.Code, w.Body)
@@ -209,5 +209,19 @@ func TestTemplateHelpers(t *testing.T) {
 	old := time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
 	if got := ago(old); got != "Mar 4, 2025" {
 		t.Errorf("ago(old) = %q", got)
+	}
+}
+
+func TestDashboardCannotBeFramed(t *testing.T) {
+	e := newEnv(t)
+	e.deploy("blog", ana, map[string]string{"index.html": "x"})
+	for _, url := range []string{"https://eze.test/", "https://eze.test/sites/blog", "https://eze.test/_q/cli/authorize?port=50123&state=abcdefghijklmnopqrstuvwxyz"} {
+		w := e.do(req{url: url, as: ana})
+		if w.Header().Get("Content-Security-Policy") != "frame-ancestors 'none'" || w.Header().Get("X-Frame-Options") != "DENY" {
+			t.Errorf("%s can be framed: %v", url, w.Header())
+		}
+	}
+	if w := e.do(req{url: "https://blog.eze.test/_q/me", as: ana}); w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("JSON responses lack nosniff")
 	}
 }

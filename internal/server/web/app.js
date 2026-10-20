@@ -25,8 +25,6 @@
     return n + ' B';
   }
 
-  // Reading what was dropped
-
   function readEntries(dir) {
     const reader = dir.createReader();
     const all = [];
@@ -146,7 +144,7 @@
   function upload(name, body, contentType, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('PUT', '/_q/api/sites/' + encodeURIComponent(name));
+      xhr.open('PUT', '/_q/sites/' + encodeURIComponent(name));
       xhr.setRequestHeader('Content-Type', contentType);
       xhr.responseType = 'json';
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
@@ -158,8 +156,6 @@
       xhr.send(body);
     });
   }
-
-  // The drop zone
 
   function el(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
@@ -305,7 +301,6 @@
       }
     }
 
-    // Wiring
     let depth = 0; // dragenter/leave fire for children too
     zone.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; zone.classList.add('over'); });
     zone.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
@@ -324,8 +319,6 @@
     window.addEventListener('drop', (e) => e.preventDefault());
   }
 
-  // Site list search
-
   function setupSearch(input) {
     const rows = [...document.querySelectorAll('[data-site-table] tbody tr')];
     const none = document.querySelector('[data-no-results]');
@@ -341,8 +334,6 @@
     });
   }
 
-  // Delete
-
   function setupDelete(form) {
     const name = form.dataset.deleteSite;
     const input = form.querySelector('[data-confirm]');
@@ -355,7 +346,7 @@
       button.disabled = true;
       error.hidden = true;
       try {
-        const res = await fetch('/_q/api/sites/' + encodeURIComponent(name), { method: 'DELETE', credentials: 'same-origin' });
+        const res = await fetch('/_q/sites/' + encodeURIComponent(name), { method: 'DELETE', credentials: 'same-origin' });
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           throw new Error((data && data.error) || 'Delete failed (' + res.status + ')');

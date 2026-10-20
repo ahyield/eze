@@ -113,7 +113,11 @@ func Deploy(args []string) error {
 		fmt.Fprintln(os.Stderr, "warning: no index.html at the top level, the site root will 404")
 	}
 
-	fmt.Printf("Deploying %d files (%s) to %s...\n", files, humanBytes(int64(buf.Len())), name)
+	noun := "files"
+	if files == 1 {
+		noun = "file"
+	}
+	fmt.Printf("Deploying %d %s (%s) to %s...\n", files, noun, humanBytes(int64(buf.Len())), name)
 	var res site
 	if err := c.do("PUT", "/_q/api/sites/"+url.PathEscape(name), &buf, "application/gzip", &res); err != nil {
 		return err

@@ -106,8 +106,6 @@ func (s *Store) Close() error { return s.db.Close() }
 
 func now() int64 { return time.Now().UnixMilli() }
 
-// Sites
-
 type Site struct {
 	Name       string    `json:"name"`
 	Owner      string    `json:"owner"`
@@ -203,8 +201,6 @@ func scanSite(r scanner) (*Site, error) {
 	return &site, nil
 }
 
-// Tokens
-
 type TokenOwner struct {
 	Email string
 	Name  string
@@ -229,8 +225,6 @@ func (s *Store) LookupToken(ctx context.Context, hash string) (*TokenOwner, erro
 	_, _ = s.db.ExecContext(ctx, `UPDATE tokens SET last_used_at = ? WHERE hash = ?`, now(), hash)
 	return &o, nil
 }
-
-// Deploy history
 
 type Deploy struct {
 	DeployedBy string    `json:"deployed_by"`
