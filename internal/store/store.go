@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS files (
 	PRIMARY KEY (site, id)
 );
 CREATE INDEX IF NOT EXISTS files_order ON files(site, created_at, id);
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+	email         TEXT NOT NULL,
+	day           TEXT NOT NULL, -- UTC, YYYY-MM-DD
+	site          TEXT NOT NULL,
+	requests      INTEGER NOT NULL,
+	input_tokens  INTEGER NOT NULL,
+	output_tokens INTEGER NOT NULL,
+	PRIMARY KEY (email, day, site)
+);
 `
 
 func Open(dataDir string) (*Store, error) {

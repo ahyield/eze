@@ -2,7 +2,7 @@
 
 Drop in a folder of HTML and get back a private URL that only people in your organisation can open.
 No frameworks, pipelines or config files. Need data? Every site gets a database, realtime updates, file uploads,
-multiplayer rooms and the viewer's identity through a tiny browser SDK, with nothing to set up.
+multiplayer rooms, AI and the viewer's identity through a tiny browser SDK, with nothing to set up.
 
 An open-source take on the idea behind Shopify's internal [Quick](https://shopify.engineering/quick) platform.
 
@@ -40,6 +40,7 @@ no spam, no abuse, no API keys in the browser. eze leans into that:
   const room = eze.ws.join('lobby');                     // multiplayer: messages + presence
   room.on('presence', (peer) => drawCursor(peer.user.name, peer.state));
   document.onmousemove = (e) => room.setState({ x: e.clientX, y: e.clientY });
+  const { text } = await eze.ai.chat('Summarize: ' + notes, { onText: (_, soFar) => show(soFar) });
 </script>
 ```
 
@@ -84,6 +85,12 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_MAX_DOC_BYTES` | 1 MB | Max database document. |
 | `EZE_MAX_UPLOAD_BYTES` | 25 MB | Max uploaded file. |
 | `EZE_UPLOAD_QUOTA_BYTES` | 1 GB | Total uploads per site. |
+| `EZE_ANTHROPIC_API_KEY` | | Enables `eze.ai`. Without it, AI calls return 503. |
+| `EZE_ANTHROPIC_BASE_URL` | | Optional API gateway in front of Anthropic. |
+| `EZE_AI_MODELS` | `claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5` | Models pages may request. |
+| `EZE_AI_DEFAULT_MODEL` | `claude-opus-5-5` | Used when a page doesn't pick one. |
+| `EZE_AI_DAILY_TOKENS` | 1000000 | Per-person daily budget (input + output), across all sites. Resets at 00:00 UTC. |
+| `EZE_AI_MAX_OUTPUT_TOKENS` | 16000 | Cap on a single reply. |
 | `EZE_RATE_LIMIT`, `EZE_RATE_BURST` | 20/s, 60 | Per-user API rate limit. |
 
 ### Try it locally
@@ -116,9 +123,16 @@ The site name comes from `--site`, then `eze.json`, then the directory name. Hid
 `node_modules`, `AGENTS.md`, `CLAUDE.md` and `eze.json` are never uploaded. In CI, set
 `EZE_SERVER` and `EZE_TOKEN` instead of running `eze login`.
 
-## Roadmap
+## AI spend
 
-- AI proxy with server-held keys (`eze.ai`)
+`eze.ai` makes every signed-in person a potential API spender, so it is bounded three ways:
+a per-person daily token budget, a per-reply output cap, and the general per-person rate limit.
+Upstream calls are cancelled when the browser goes away. Usage is recorded per person, per site,
+per day in the `ai_usage` table of `eze.db`, so you can see where tokens went:
+
+```sh
+sqlite3 eze.db "SELECT day, email, site, requests, input_tokens, output_tokens FROM ai_usage ORDER BY day DESC"
+```
 
 ## License
 

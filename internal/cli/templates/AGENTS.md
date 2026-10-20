@@ -118,6 +118,34 @@ await eze.files.delete(file.id);
 Store `file.id` or `file.url` in a database document to attach files to records.
 Images, video, audio, PDFs, plain text, CSV and JSON open in the browser; other types download.
 
+### AI
+
+Call Claude from the page. The server holds the API key; each person has a daily token
+budget shared across all sites. Check `(await eze.ai.usage()).enabled` first if the feature is optional.
+
+```js
+const { text } = await eze.ai.chat('Summarize: ' + notes);
+
+// Conversation, options, and streaming as it's written:
+const res = await eze.ai.chat(
+  [{ role: 'user', content: 'Hi' }, { role: 'assistant', content: 'Hello!' }, { role: 'user', content: 'Plan my week' }],
+  {
+    system: 'You are a concise planner.',    // optional
+    effort: 'low',                           // optional: low | medium | high | xhigh | max
+    onText: (chunk, soFar) => { out.textContent = soFar; },
+    signal: controller.signal,               // optional AbortController signal
+  },
+);
+// res: { text, model, stop_reason, usage: { input_tokens, output_tokens } }
+
+const u = await eze.ai.usage(); // { enabled, used, limit, resets_at, models, default_model, max_tokens_cap }
+```
+
+Messages are text only. Stream (`onText`) anything a person waits on. Check `res.stop_reason`:
+`'refusal'` means the model declined, `'max_tokens'` means the reply was cut off. A 429 error
+means the person's daily budget is used up; show the message rather than retrying.
+For structured output, ask for JSON in the prompt and `JSON.parse` the text defensively.
+
 ### Errors
 
 Failed calls throw `eze.EzeError` with `.status` (HTTP status) and `.message`.
