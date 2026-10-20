@@ -36,8 +36,8 @@ pre .dim { color: var(--pebble); }
 
 /* Header */
 header { display: flex; align-items: center; justify-content: space-between; padding: 28px 0; }
-.logo { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-size: 22px; font-weight: 700; letter-spacing: -0.04em; }
-.logo svg { width: 30px; height: 30px; color: var(--blue); }
+.logo { display: inline-flex; color: var(--ink); }
+.logo svg { height: 36px; width: auto; }
 header nav { display: flex; gap: 28px; font-size: 16px; }
 header nav a { color: var(--stone); text-decoration: none; }
 header nav a:hover { color: var(--ink); }
