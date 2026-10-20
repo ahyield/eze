@@ -168,6 +168,7 @@ func (s *Server) handleDeleteSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.hub.dropSite(name)
+	s.rooms.dropSite(name)
 	slog.Info("delete", "site", name, "by", auth.UserFrom(r.Context()).Email)
 	w.WriteHeader(http.StatusNoContent)
 }

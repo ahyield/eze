@@ -24,6 +24,7 @@ type Server struct {
 	sites   *sites.Store
 	uploads *uploads.Store
 	hub     *hub
+	rooms   *rooms
 	limiter *rateLimiter
 
 	public *http.ServeMux // apex routes reachable without a user (login flow)
@@ -43,6 +44,7 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 		sites:   ss,
 		uploads: up,
 		hub:     newHub(),
+		rooms:   newRooms(),
 		limiter: newRateLimiter(cfg.RateLimit, cfg.RateBurst),
 		public:  http.NewServeMux(),
 		apex:    http.NewServeMux(),
@@ -69,6 +71,7 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	s.site.HandleFunc("PATCH /_q/db/{collection}/{id}", s.handleUpdateDoc)
 	s.site.HandleFunc("DELETE /_q/db/{collection}/{id}", s.handleDeleteDoc)
 	s.site.HandleFunc("GET /_q/subscribe/{collection}", s.handleSubscribe)
+	s.site.HandleFunc("GET /_q/ws/{room}", s.handleRoom)
 	s.site.HandleFunc("POST /_q/files", s.handleUpload)
 	s.site.HandleFunc("GET /_q/files", s.handleListFiles)
 	s.site.HandleFunc("GET /_q/files/{id}", s.handleGetFile)
