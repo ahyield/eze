@@ -1,9 +1,7 @@
 package server
 
 import (
-	"embed"
 	"errors"
-	"html/template"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -17,52 +15,7 @@ import (
 	"github.com/ahyield/eze/internal/store"
 )
 
-//go:embed web
-var webFS embed.FS
-
-var (
-	templates = template.Must(template.ParseFS(webFS, "web/*.html"))
-	sdkJS, _  = webFS.ReadFile("web/sdk.js")
-	stateRe   = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
-)
-
-func (s *Server) handleSDK(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Write(sdkJS)
-}
-
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListSites(r.Context())
-	if err != nil {
-		s.internalErr(w, r, err)
-		return
-	}
-	type row struct {
-		store.Site
-		URL string
-	}
-	rows := make([]row, len(list))
-	for i, site := range list {
-		rows[i] = row{site, s.cfg.SiteURL(site.Name)}
-	}
-	s.render(w, "index.html", map[string]any{
-		"User":   auth.UserFrom(r.Context()),
-		"Sites":  rows,
-		"Server": s.cfg.ApexURL(""),
-		"Scheme": s.cfg.Scheme,
-		"Domain": s.cfg.Domain,
-		"OIDC":   s.cfg.AuthMode == config.AuthOIDC,
-	})
-}
-
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	if err := templates.ExecuteTemplate(w, name, data); err != nil {
-		slog.Error("render", "template", name, "err", err)
-	}
-}
+var stateRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 
 type siteResponse struct {
 	store.Site
@@ -189,7 +142,7 @@ func (s *Server) handleCLIAuthorizePage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "invalid CLI login request", http.StatusBadRequest)
 		return
 	}
-	s.render(w, "authorize.html", map[string]any{
+	s.render(w, http.StatusOK, "authorize.html", map[string]any{
 		"User":  auth.UserFrom(r.Context()),
 		"Port":  port,
 		"State": state,

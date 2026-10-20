@@ -1,64 +1,32 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eze</title>
-<style>
-  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0c0a09; --fg: #f5f5f4; --muted: #a8a29e; --line: #292524; --card: #1c1917; --accent: #60a5fa; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 48px 16px; }
-  header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  h1 { font-size: 28px; margin: 0; letter-spacing: -0.02em; }
-  h2 { font-size: 15px; margin: 40px 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-  .who { color: var(--muted); font-size: 14px; }
-  .who form { display: inline; }
-  .who button { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
-  pre { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; }
-  .muted { color: var(--muted); }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
-  th { color: var(--muted); font-weight: 500; }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .empty { padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
-  @media (max-width: 600px) { .hide-sm { display: none; } }
-</style>
-</head>
-<body>
-<main>
-  <header>
-    <h1>eze</h1>
-    <div class="who">Signed in as {{.User.Email}}{{if .OIDC}} · <form method="post" action="/_q/auth/logout"><button>Sign out</button></form>{{end}}</div>
-  </header>
+{{template "head" .}}
+{{template "dropzone" .}}
+<script type="application/json" id="known-sites">{{json .Known}}</script>
 
-  <h2>Ship a site</h2>
-  <pre>eze login {{.Server}}
-eze init my-site     <span class="muted"># starter page + instructions for your coding agent</span>
-cd my-site
-eze deploy           <span class="muted"># live at {{.Scheme}}://my-site.{{.Domain}}</span></pre>
+<p class="muted" style="font-size:14px;margin:12px 2px 0">
+  Prefer the terminal? <code>eze login {{.Server}}</code>, then <code>eze init</code> and <code>eze deploy</code>.
+  {{with .AI}}<span style="float:right">AI today: {{num .Used}} of {{num .Limit}} tokens</span>{{end}}
+</p>
 
-  <h2>Sites ({{len .Sites}})</h2>
-  {{if .Sites}}
-  <table>
-    <thead><tr><th>Site</th><th class="hide-sm">Last deployed by</th><th>Updated</th></tr></thead>
-    <tbody>
-    {{range .Sites}}
-      <tr>
-        <td><a href="{{.URL}}">{{.Name}}</a></td>
-        <td class="hide-sm">{{.DeployedBy}}</td>
-        <td class="muted"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{.UpdatedAt.Format "Jan 2, 2006"}}</time></td>
-      </tr>
-    {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <div class="empty muted">Nothing here yet. Deploy the first site.</div>
+<h2>
+  <span>Sites <span class="count">{{len .Sites}}</span></span>
+</h2>
+{{if .Sites}}
+<input type="search" placeholder="Search sites or people" aria-label="Search sites" data-site-search style="margin-bottom:8px">
+<table class="table" data-site-table>
+  <thead><tr><th>Site</th><th class="hide-sm">Last deployed by</th><th>Updated</th><th></th></tr></thead>
+  <tbody>
+  {{range .Sites}}
+    <tr data-search="{{.Name}} {{.DeployedBy}} {{.Owner}}">
+      <td><a class="site-name" href="/sites/{{.Name}}">{{.Name}}</a></td>
+      <td class="hide-sm muted">{{.DeployedBy}}</td>
+      <td class="muted"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{ago .UpdatedAt}}</time></td>
+      <td class="num"><a href="{{.URL}}">Open</a></td>
+    </tr>
   {{end}}
-</main>
-</body>
-</html>
+  </tbody>
+</table>
+<p class="empty" data-no-results hidden>No sites match.</p>
+{{else}}
+<div class="empty">Nothing here yet. Drop the first site above.</div>
+{{end}}
+{{template "foot" .}}

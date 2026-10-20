@@ -58,6 +58,9 @@ func New(cfg *config.Config, authn auth.Authenticator, st *store.Store, ss *site
 	authn.Mount(s.public)
 
 	s.apex.HandleFunc("GET /{$}", s.handleIndex)
+	s.apex.HandleFunc("GET /sites/{name}", s.handleSitePage)
+	s.apex.HandleFunc("GET /_q/app.js", serveAsset("text/javascript; charset=utf-8", appJS))
+	s.apex.HandleFunc("GET /_q/app.css", serveAsset("text/css; charset=utf-8", appCSS))
 	s.apex.HandleFunc("GET /_q/sdk.js", s.handleSDK)
 	s.apex.HandleFunc("GET /_q/me", s.handleMe)
 	s.apex.HandleFunc("GET /_q/cli/authorize", s.handleCLIAuthorizePage)
