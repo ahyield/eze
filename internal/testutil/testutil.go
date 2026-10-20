@@ -3,8 +3,10 @@ package testutil
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"io/fs"
 	"testing"
 )
 
@@ -54,4 +56,29 @@ func Files(t testing.TB, files map[string]string) []byte {
 		entries = append(entries, Entry{Name: name, Body: body})
 	}
 	return TarGz(t, entries...)
+}
+
+// Zip builds a zip archive from entries, in order. Type tar.TypeSymlink marks a symlink
+// (Body is its target); names ending in "/" are directories.
+func Zip(t testing.TB, entries ...Entry) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, e := range entries {
+		hdr := &zip.FileHeader{Name: e.Name, Method: zip.Deflate}
+		if e.Type == tar.TypeSymlink {
+			hdr.SetMode(0o777 | fs.ModeSymlink)
+		}
+		w, err := zw.CreateHeader(hdr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(e.Body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

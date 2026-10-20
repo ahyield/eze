@@ -229,3 +229,34 @@ func (s *Store) LookupToken(ctx context.Context, hash string) (*TokenOwner, erro
 	_, _ = s.db.ExecContext(ctx, `UPDATE tokens SET last_used_at = ? WHERE hash = ?`, now(), hash)
 	return &o, nil
 }
+
+// Deploy history
+
+type Deploy struct {
+	DeployedBy string    `json:"deployed_by"`
+	Files      int       `json:"files"`
+	Bytes      int64     `json:"bytes"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// ListDeploys returns a site's most recent deploys, newest first.
+func (s *Store) ListDeploys(ctx context.Context, site string, limit int) ([]Deploy, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT deployed_by, files, bytes, created_at FROM deploys WHERE site = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+		site, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	deploys := []Deploy{}
+	for rows.Next() {
+		var d Deploy
+		var created int64
+		if err := rows.Scan(&d.DeployedBy, &d.Files, &d.Bytes, &created); err != nil {
+			return nil, err
+		}
+		d.CreatedAt = time.UnixMilli(created).UTC()
+		deploys = append(deploys, d)
+	}
+	return deploys, rows.Err()
+}

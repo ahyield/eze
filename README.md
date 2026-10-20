@@ -14,6 +14,10 @@ claude "make a site where my team can vote on lunch spots in real time"
 eze deploy                   # live at https://lunch-vote.eze.page
 ```
 
+No terminal? Open `https://eze.page`, drop a folder, a `.zip` or a single HTML file on the page,
+pick a name, and it's live. Each site has a page at `/sites/<name>` with its deploy history,
+uploaded files, AI usage, a drop zone for new versions, and delete.
+
 ## Why it is this simple
 
 Everything sits behind your company's sign-in, so the hard parts of the open web disappear:

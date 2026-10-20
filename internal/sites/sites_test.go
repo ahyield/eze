@@ -247,3 +247,130 @@ func TestNewStoreCleansStaleTmp(t *testing.T) {
 		t.Error("stale staging dir not removed")
 	}
 }
+
+func TestDeployZip(t *testing.T) {
+	s := newStore(t)
+	archive := testutil.Zip(t,
+		testutil.Entry{Name: "index.html", Body: "zip home"},
+		testutil.Entry{Name: "assets/", Body: ""},
+		testutil.Entry{Name: "assets/app.js", Body: "js"},
+	)
+	files, size, err := s.Deploy("blog", bytes.NewReader(archive))
+	if err != nil || files != 2 || size != int64(len("zip homejs")) {
+		t.Fatalf("files=%d size=%d err=%v", files, size, err)
+	}
+	if w := get(s, "blog", "/"); w.Body.String() != "zip home" {
+		t.Errorf("/ = %q", w.Body)
+	}
+	if w := get(s, "blog", "/assets/app.js"); w.Body.String() != "js" {
+		t.Errorf("/assets/app.js = %q", w.Body)
+	}
+}
+
+func TestDeployZipFromFinder(t *testing.T) {
+	// What macOS "Compress" produces for a folder: everything wrapped in the folder, plus clutter.
+	s := newStore(t)
+	archive := testutil.Zip(t,
+		testutil.Entry{Name: "my-site/", Body: ""},
+		testutil.Entry{Name: "my-site/index.html", Body: "home"},
+		testutil.Entry{Name: "my-site/.DS_Store", Body: "junk"},
+		testutil.Entry{Name: "my-site/css/site.css", Body: "css"},
+		testutil.Entry{Name: "__MACOSX/my-site/._index.html", Body: "fork"},
+		testutil.Entry{Name: "my-site/link", Type: tar.TypeSymlink, Body: "/etc/passwd"},
+	)
+	files, _, err := s.Deploy("blog", bytes.NewReader(archive))
+	if err != nil || files != 2 {
+		t.Fatalf("files=%d err=%v", files, err)
+	}
+	if w := get(s, "blog", "/"); w.Body.String() != "home" {
+		t.Errorf("wrapper folder not unwrapped: / = %d %q", w.Code, w.Body)
+	}
+	if w := get(s, "blog", "/css/site.css"); w.Body.String() != "css" {
+		t.Errorf("/css/site.css = %q", w.Body)
+	}
+	for _, p := range []string{"__MACOSX", ".DS_Store", "link"} {
+		if _, err := os.Lstat(filepath.Join(s.dir("blog"), p)); !os.IsNotExist(err) {
+			t.Errorf("%s was extracted", p)
+		}
+	}
+}
+
+func TestWrapperDir(t *testing.T) {
+	for _, tt := range []struct {
+		paths []string
+		want  string
+	}{
+		{[]string{"site/index.html", "site/a.js"}, "site/"},
+		{[]string{"site/index.html"}, "site/"},
+		{[]string{"index.html", "site/a.js"}, ""},
+		{[]string{"a/index.html", "b/index.html"}, ""},
+		{[]string{"index.html"}, ""},
+		{nil, ""},
+	} {
+		if got := wrapperDir(len(tt.paths), func(i int) string { return tt.paths[i] }); got != tt.want {
+			t.Errorf("wrapperDir(%v) = %q, want %q", tt.paths, got, tt.want)
+		}
+	}
+}
+
+func TestDeployZipRejects(t *testing.T) {
+	tests := map[string][]byte{
+		"traversal":    testutil.Zip(t, testutil.Entry{Name: "../../etc/cron.d/x", Body: "x"}),
+		"absolute":     testutil.Zip(t, testutil.Entry{Name: "/etc/passwd", Body: "x"}),
+		"only clutter": testutil.Zip(t, testutil.Entry{Name: ".DS_Store", Body: "x"}, testutil.Entry{Name: "__MACOSX/._a", Body: "x"}),
+		"truncated":    testutil.Zip(t, testutil.Entry{Name: "index.html", Body: "hello"})[:30],
+		"unknown":      []byte("GIF89a not an archive"),
+	}
+	for name, archive := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := newStore(t)
+			var de *DeployError
+			if _, _, err := s.Deploy("blog", bytes.NewReader(archive)); !errors.As(err, &de) {
+				t.Fatalf("got %v, want DeployError", err)
+			}
+			if s.Exists("blog") {
+				t.Error("site created")
+			}
+			if entries, _ := os.ReadDir(s.tmp); len(entries) != 0 {
+				t.Errorf("tmp not cleaned: %d entries", len(entries))
+			}
+		})
+	}
+}
+
+func TestDeployZipLimits(t *testing.T) {
+	s, _ := NewStore(t.TempDir(), 10, 2)
+	var de *DeployError
+	_, _, err := s.Deploy("blog", bytes.NewReader(testutil.Zip(t,
+		testutil.Entry{Name: "a", Body: "1"}, testutil.Entry{Name: "b", Body: "2"}, testutil.Entry{Name: "c", Body: "3"})))
+	if !errors.As(err, &de) || !strings.Contains(err.Error(), "files") {
+		t.Errorf("too many files: %v", err)
+	}
+	// A zip bomb: tiny compressed, large uncompressed. The limit counts real bytes.
+	_, _, err = s.Deploy("blog", bytes.NewReader(testutil.Zip(t, testutil.Entry{Name: "a", Body: strings.Repeat("0", 1<<20)})))
+	if !errors.As(err, &de) || !strings.Contains(err.Error(), "larger") {
+		t.Errorf("zip bomb: %v", err)
+	}
+}
+
+func TestDeployTarFromMacTar(t *testing.T) {
+	// bsdtar on macOS adds AppleDouble entries for extended attributes.
+	s := newStore(t)
+	archive := testutil.TarGz(t,
+		testutil.Entry{Name: "./", Type: tar.TypeDir},
+		testutil.Entry{Name: "./._.", Body: "xattrs"},
+		testutil.Entry{Name: "./index.html", Body: "home"},
+		testutil.Entry{Name: "./._index.html", Body: "xattrs"},
+		testutil.Entry{Name: "./.env", Body: "SECRET=1"},
+	)
+	files, _, err := s.Deploy("blog", bytes.NewReader(archive))
+	if err != nil || files != 1 {
+		t.Fatalf("files=%d err=%v", files, err)
+	}
+	if w := get(s, "blog", "/"); w.Body.String() != "home" {
+		t.Errorf("/ = %q", w.Body)
+	}
+	if _, err := os.Stat(filepath.Join(s.dir("blog"), ".env")); !os.IsNotExist(err) {
+		t.Error(".env was extracted")
+	}
+}

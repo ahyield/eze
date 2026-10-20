@@ -1,0 +1,39 @@
+{{define "head"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="/_q/app.css">
+</head>
+<body>
+<main>
+<header class="top">
+  <a class="brand" href="/">eze</a>
+  <div class="who">
+    <span>{{.User.Email}}</span>
+    {{if .OIDC}}<form method="post" action="/_q/auth/logout"><button class="linkish">Sign out</button></form>{{end}}
+  </div>
+</header>
+{{end}}
+
+{{define "foot"}}
+</main>
+<script src="/_q/app.js"></script>
+</body>
+</html>
+{{end}}
+
+{{define "dropzone"}}
+<section class="drop" data-drop data-site="{{.Name}}" data-domain="{{.Domain}}" data-scheme="{{.Scheme}}" data-max="{{.MaxDeployBytes}}">
+  <div data-idle>
+    <p class="title">{{if .Name}}Drop a new version of {{.Name}}{{else}}Drop a folder to deploy it{{end}}</p>
+    <p class="hint">A folder, a .zip, or a single HTML file. {{if .Name}}It replaces the whole site.{{else}}It goes live at <span class="mono">name.{{.Domain}}</span>{{end}}</p>
+    <div class="actions">
+      <label class="btn">Choose folder<input type="file" webkitdirectory multiple data-pick-folder></label>
+      <label class="btn">Choose .zip or file<input type="file" accept=".zip,.html,.htm" data-pick-file></label>
+    </div>
+  </div>
+  <div class="stage" data-stage hidden></div>
+</section>
+{{end}}

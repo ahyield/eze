@@ -29,3 +29,32 @@ func (s *Store) RecordAIUsage(ctx context.Context, email, site string, at time.T
 		email, usageDay(at), site, input, output)
 	return err
 }
+
+type AIUsage struct {
+	Email        string `json:"email"`
+	Requests     int64  `json:"requests"`
+	InputTokens  int64  `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+}
+
+// AIUsageBySite totals a site's AI usage per person over the UTC days from since to today,
+// heaviest users first.
+func (s *Store) AIUsageBySite(ctx context.Context, site string, since time.Time) ([]AIUsage, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT email, SUM(requests), SUM(input_tokens), SUM(output_tokens) FROM ai_usage
+		WHERE site = ? AND day >= ? GROUP BY email
+		ORDER BY SUM(input_tokens + output_tokens) DESC`, site, usageDay(since))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	usage := []AIUsage{}
+	for rows.Next() {
+		var u AIUsage
+		if err := rows.Scan(&u.Email, &u.Requests, &u.InputTokens, &u.OutputTokens); err != nil {
+			return nil, err
+		}
+		usage = append(usage, u)
+	}
+	return usage, rows.Err()
+}

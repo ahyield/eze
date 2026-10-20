@@ -358,3 +358,34 @@ func TestAIUsage(t *testing.T) {
 		t.Errorf("requests = %d", requests)
 	}
 }
+
+func TestListDeploys(t *testing.T) {
+	s := open(t)
+	for i, who := range []string{"ana@example.com", "bo@example.com", "cy@example.com"} {
+		if err := s.RecordDeploy(ctx, "blog", who, i+1, int64(i*100)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.RecordDeploy(ctx, "other", "zed@example.com", 1, 1)
+	got, err := s.ListDeploys(ctx, "blog", 2)
+	if err != nil || len(got) != 2 || got[0].DeployedBy != "cy@example.com" || got[1].DeployedBy != "bo@example.com" || got[0].Files != 3 {
+		t.Errorf("deploys = %+v, %v", got, err)
+	}
+}
+
+func TestAIUsageBySite(t *testing.T) {
+	s := open(t)
+	today := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	s.RecordAIUsage(ctx, "ana@example.com", "blog", today, 10, 10)
+	s.RecordAIUsage(ctx, "ana@example.com", "blog", today.AddDate(0, 0, -3), 5, 5)
+	s.RecordAIUsage(ctx, "bo@example.com", "blog", today, 100, 100)
+	s.RecordAIUsage(ctx, "bo@example.com", "blog", today.AddDate(0, 0, -40), 9999, 0) // outside the window
+	s.RecordAIUsage(ctx, "cy@example.com", "game", today, 50, 50)                     // other site
+	got, err := s.AIUsageBySite(ctx, "blog", today.AddDate(0, 0, -29))
+	if err != nil || len(got) != 2 {
+		t.Fatalf("usage = %+v, %v", got, err)
+	}
+	if got[0].Email != "bo@example.com" || got[0].InputTokens != 100 || got[1].Email != "ana@example.com" || got[1].Requests != 2 || got[1].InputTokens != 15 {
+		t.Errorf("usage = %+v", got)
+	}
+}

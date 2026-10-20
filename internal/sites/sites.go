@@ -3,10 +3,14 @@ package sites
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bufio"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -90,7 +94,7 @@ func readErr(err error) error {
 	return deployErr("reading archive: %v", err)
 }
 
-// Deploy extracts a gzipped tarball into a staging directory and swaps it in place of the
+// Deploy extracts a .tar.gz or .zip archive into a staging directory and swaps it in place of the
 // current site, so visitors never see a half-written site.
 func (s *Store) Deploy(name string, archive io.Reader) (files int, bytes int64, err error) {
 	staging, err := os.MkdirTemp(s.tmp, "deploy-"+name+"-")
@@ -153,63 +157,182 @@ func (s *Store) Delete(name string) error {
 	return os.RemoveAll(old)
 }
 
+// extract unpacks a .tar.gz or .zip upload, detected from its first bytes.
 func (s *Store) extract(dst string, archive io.Reader) (files int, total int64, err error) {
-	gz, err := gzip.NewReader(archive)
+	br := bufio.NewReader(archive)
+	magic, _ := br.Peek(4)
+	w := &writer{dst: dst, maxFiles: s.MaxSiteFiles, maxBytes: s.MaxSiteBytes}
+	switch {
+	case bytes.HasPrefix(magic, []byte{0x1f, 0x8b}):
+		err = w.tarGz(br)
+	case bytes.HasPrefix(magic, []byte("PK\x03\x04")), bytes.HasPrefix(magic, []byte("PK\x05\x06")):
+		err = s.zip(w, br)
+	default:
+		err = deployErr("upload must be a .tar.gz or .zip archive")
+	}
+	return w.files, w.total, err
+}
+
+// writer writes extracted files under dst, enforcing the site's file and size limits.
+type writer struct {
+	dst      string
+	maxFiles int
+	maxBytes int64
+	files    int
+	total    int64
+}
+
+func (w *writer) add(rel string, r io.Reader) error {
+	w.files++
+	if w.files > w.maxFiles {
+		return deployErr("site has more than %d files", w.maxFiles)
+	}
+	full := filepath.Join(w.dst, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return deployErr("conflicting paths in archive at %q", rel)
+	}
+	f, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return 0, 0, deployErr("upload must be a gzipped tar archive")
+		return deployErr("conflicting paths in archive at %q", rel)
+	}
+	// Never trust sizes declared in the archive: count what actually comes out.
+	n, err := io.Copy(f, io.LimitReader(r, w.maxBytes-w.total+1))
+	cerr := f.Close()
+	if err != nil {
+		return readErr(err)
+	}
+	if cerr != nil {
+		return cerr
+	}
+	w.total += n
+	if w.total > w.maxBytes {
+		return deployErr("site is larger than %d bytes", w.maxBytes)
+	}
+	return nil
+}
+
+func (w *writer) tarGz(r io.Reader) error {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return readErr(err)
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return files, total, nil
+			return nil
 		}
 		if err != nil {
-			return 0, 0, readErr(err)
+			return readErr(err)
+		}
+		if isClutter(hdr.Name) {
+			continue // e.g. the ._* AppleDouble entries macOS tar adds
 		}
 		rel, ok := cleanPath(hdr.Name)
 		if !ok {
-			return 0, 0, deployErr("invalid path in archive: %q", hdr.Name)
+			return deployErr("invalid path in archive: %q", hdr.Name)
 		}
 		if rel == "" {
 			continue
 		}
-		full := filepath.Join(dst, filepath.FromSlash(rel))
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(full, 0o755); err != nil {
-				return 0, 0, err
+			if err := os.MkdirAll(filepath.Join(w.dst, filepath.FromSlash(rel)), 0o755); err != nil {
+				return deployErr("conflicting paths in archive at %q", rel)
 			}
 		case tar.TypeReg:
-			files++
-			if files > s.MaxSiteFiles {
-				return 0, 0, deployErr("site has more than %d files", s.MaxSiteFiles)
-			}
-			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-				return 0, 0, err
-			}
-			f, err := os.OpenFile(full, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-			if err != nil {
-				return 0, 0, err
-			}
-			remaining := s.MaxSiteBytes - total
-			n, err := io.Copy(f, io.LimitReader(tr, remaining+1))
-			cerr := f.Close()
-			if err != nil {
-				return 0, 0, readErr(err)
-			}
-			if cerr != nil {
-				return 0, 0, cerr
-			}
-			total += n
-			if total > s.MaxSiteBytes {
-				return 0, 0, deployErr("site is larger than %d bytes", s.MaxSiteBytes)
+			if err := w.add(rel, tr); err != nil {
+				return err
 			}
 		default:
 			// Symlinks, devices and the like are silently skipped: a site is just files.
 		}
 	}
+}
+
+// zip handles archives made by "Compress" in Finder or Explorer, or downloaded from
+// elsewhere. OS clutter (__MACOSX, ._*, .DS_Store) is skipped, as for tarballs, and a
+// single folder wrapping everything is unwrapped.
+func (s *Store) zip(w *writer, r io.Reader) error {
+	// zip needs random access, so spool the upload to disk first; its size is already
+	// capped by the caller's request body limit.
+	tmp, err := os.CreateTemp(s.tmp, "upload-*.zip")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	size, err := io.Copy(tmp, r)
+	if err != nil {
+		return readErr(err)
+	}
+	zr, err := zip.NewReader(tmp, size)
+	if err != nil {
+		return deployErr("not a valid zip archive")
+	}
+
+	type entry struct {
+		rel string
+		f   *zip.File
+	}
+	var entries []entry
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "/") || f.Mode()&fs.ModeSymlink != 0 || isClutter(f.Name) {
+			continue
+		}
+		rel, ok := cleanPath(f.Name)
+		if !ok {
+			return deployErr("invalid path in archive: %q", f.Name)
+		}
+		if rel != "" {
+			entries = append(entries, entry{rel, f})
+		}
+	}
+
+	prefix := wrapperDir(len(entries), func(i int) string { return entries[i].rel })
+	for _, e := range entries {
+		rc, err := e.f.Open()
+		if err != nil {
+			return deployErr("reading %q from zip: %v", e.f.Name, err)
+		}
+		err = w.add(strings.TrimPrefix(e.rel, prefix), rc)
+		rc.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isClutter matches files operating systems add to archives: __MACOSX resource forks and
+// hidden files such as .DS_Store or ._index.html.
+func isClutter(name string) bool {
+	for seg := range strings.SplitSeq(strings.ReplaceAll(name, "\\", "/"), "/") {
+		if seg == "__MACOSX" || (strings.HasPrefix(seg, ".") && seg != "." && seg != ".." && seg != ".well-known") {
+			return true
+		}
+	}
+	return false
+}
+
+// wrapperDir returns "dir/" when every path sits inside one top-level folder and there is
+// no top-level index.html, i.e. someone zipped the folder rather than its contents.
+func wrapperDir(n int, path func(int) string) string {
+	if n == 0 {
+		return ""
+	}
+	first, _, ok := strings.Cut(path(0), "/")
+	if !ok {
+		return ""
+	}
+	for i := 1; i < n; i++ {
+		dir, _, ok := strings.Cut(path(i), "/")
+		if !ok || dir != first {
+			return ""
+		}
+	}
+	return first + "/"
 }
 
 // cleanPath normalises an archive or URL path into a relative slash path, rejecting

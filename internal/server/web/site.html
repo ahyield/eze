@@ -1,0 +1,117 @@
+{{template "head" .}}
+<p style="margin:-12px 0 20px"><a href="/">&larr; All sites</a></p>
+
+{{if .Site}}
+<div class="site-head">
+  <div>
+    <h1>{{.Name}}</h1>
+    <a class="url" href="{{.URL}}">{{.URL}}</a>
+  </div>
+  <a class="btn primary" href="{{.URL}}">Open site</a>
+</div>
+
+<div class="facts">
+  <div class="fact">
+    <div class="k">Last deploy</div>
+    <div class="v">{{ago .Site.UpdatedAt}}</div>
+    <div class="muted" style="font-size:13px">by {{.Site.DeployedBy}}</div>
+  </div>
+  <div class="fact">
+    <div class="k">Created by</div>
+    <div class="v">{{.Site.Owner}}</div>
+    <div class="muted" style="font-size:13px">{{.Site.CreatedAt.Format "Jan 2, 2006"}}{{if eq .Policy "owner"}} <span class="tag">owner</span>{{end}}</div>
+  </div>
+  <div class="fact">
+    <div class="k">Size</div>
+    <div class="v">{{bytes .Site.Bytes}}</div>
+    <div class="muted" style="font-size:13px">{{num .Site.Files}} {{if eq .Site.Files 1}}file{{else}}files{{end}}</div>
+  </div>
+  <div class="fact">
+    <div class="k">Uploads</div>
+    <div class="v">{{bytes .Uploaded}}</div>
+    <div class="meter" title="{{bytes .Uploaded}} of {{bytes .UploadQuota}}"><div style="width:{{percent .Uploaded .UploadQuota}}%"></div></div>
+  </div>
+</div>
+
+{{if .CanManage}}
+<h2>Redeploy</h2>
+{{template "dropzone" .}}
+{{else}}
+<p class="notice">Only {{.Site.Owner}} can redeploy or delete this site.</p>
+{{end}}
+
+<h2><span>Deploy history</span></h2>
+<table class="table">
+  <thead><tr><th>When</th><th>By</th><th class="num">Files</th><th class="num hide-sm">Size</th></tr></thead>
+  <tbody>
+  {{range .Deploys}}
+    <tr>
+      <td><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.CreatedAt.Format "Jan 2, 2006 15:04 MST"}}">{{ago .CreatedAt}}</time></td>
+      <td style="overflow-wrap:anywhere">{{.DeployedBy}}</td>
+      <td class="num">{{num .Files}}</td>
+      <td class="num hide-sm">{{bytes .Bytes}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+
+<h2><span>Uploaded files</span>{{if .Files}} <span class="count">{{bytes .Uploaded}} of {{bytes .UploadQuota}}</span>{{end}}</h2>
+{{if .Files}}
+<table class="table">
+  <thead><tr><th>File</th><th class="hide-sm">Uploaded by</th><th class="num">Size</th><th>When</th></tr></thead>
+  <tbody>
+  {{range .Files}}
+    <tr>
+      <td style="overflow-wrap:anywhere"><a href="{{.URL}}">{{.File.Name}}</a> <span class="faint mono hide-sm">{{.File.ContentType}}</span></td>
+      <td class="hide-sm muted">{{.File.CreatedBy}}</td>
+      <td class="num">{{bytes .File.Size}}</td>
+      <td class="muted">{{ago .File.CreatedAt}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{if ge (len .Files) .FilesShown}}<p class="muted" style="font-size:14px">Showing the latest {{.FilesShown}}.</p>{{end}}
+{{else}}
+<div class="empty">No uploads. Files show up here when the site uses <code>eze.files</code>.</div>
+{{end}}
+
+{{if .AIDays}}
+<h2><span>AI usage, last {{.AIDays}} days</span>{{if .AIUsage}} <span class="count">{{num .AITotal}} tokens</span>{{end}}</h2>
+{{if .AIUsage}}
+<table class="table">
+  <thead><tr><th>Person</th><th class="num">Requests</th><th class="num hide-sm">Input</th><th class="num hide-sm">Output</th><th class="num">Total</th></tr></thead>
+  <tbody>
+  {{range .AIUsage}}
+    <tr>
+      <td style="overflow-wrap:anywhere">{{.Email}}</td>
+      <td class="num">{{num .Requests}}</td>
+      <td class="num hide-sm">{{num .InputTokens}}</td>
+      <td class="num hide-sm">{{num .OutputTokens}}</td>
+      <td class="num">{{num (add .InputTokens .OutputTokens)}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{else}}
+<div class="empty">No AI calls from this site yet.</div>
+{{end}}
+{{end}}
+
+{{if .CanManage}}
+<h2><span>Delete</span></h2>
+<form class="danger-zone" data-delete-site="{{.Name}}">
+  <p>Deletes the site, its database and its uploaded files for everyone. This can't be undone.</p>
+  <div class="row">
+    <input type="text" placeholder="Type {{.Name}} to confirm" aria-label="Type the site name to confirm" autocomplete="off" data-confirm>
+    <button class="btn danger" type="submit" disabled>Delete</button>
+  </div>
+  <p class="notice warn" data-error hidden style="margin:12px 0 0"></p>
+</form>
+{{end}}
+
+{{else}}
+<h1>{{.Name}}</h1>
+<p class="muted">There's no site called {{.Name}} yet. Drop a folder to create it at <a href="{{.URL}}">{{.URL}}</a>.</p>
+{{template "dropzone" .}}
+{{end}}
+{{template "foot" .}}
