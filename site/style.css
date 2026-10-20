@@ -9,8 +9,9 @@
   --blue: #2563eb;
   --blue-soft: #dbeafe;
 }
+/* Dark follows the system unless the theme button picked one (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #0c0a09;
     --ink: #f5f5f4;
     --stone: #a8a29e;
@@ -21,6 +22,17 @@
     --blue: #60a5fa;
     --blue-soft: #1e3a8a;
   }
+}
+:root[data-theme="dark"] {
+  --paper: #0c0a09;
+  --ink: #f5f5f4;
+  --stone: #a8a29e;
+  --pebble: #78716c;
+  --line: #292524;
+  --panel: #1c1917;
+  --well: #141210;
+  --blue: #60a5fa;
+  --blue-soft: #1e3a8a;
 }
 
 * { box-sizing: border-box; }
@@ -41,6 +53,13 @@ header { display: flex; align-items: center; justify-content: space-between; pad
 header nav { display: flex; gap: 28px; font-size: 16px; }
 header nav a { color: var(--stone); text-decoration: none; }
 header nav a:hover { color: var(--ink); }
+header nav { align-items: center; }
+.theme { display: grid; place-items: center; width: 36px; height: 36px; margin: -6px -8px -6px -6px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--stone); cursor: pointer; }
+.theme:hover { color: var(--ink); background: var(--well); }
+.theme:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.theme svg { width: 20px; height: 20px; }
+.theme .sun, :root[data-shown="dark"] .theme .moon { display: none; }
+:root[data-shown="dark"] .theme .sun { display: block; }
 
 /* Hero */
 .hero { padding: 72px 0 96px; }
