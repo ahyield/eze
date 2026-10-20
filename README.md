@@ -1,4 +1,9 @@
-# eze
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img alt="eze" src="docs/logo-light.svg" height="56">
+  </picture>
+</h1>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/hero-dark.png">
