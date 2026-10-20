@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eze: private websites for your team</title>
+<meta name="description" content="eze is open-source hosting you run inside your company. Upload a folder of HTML and get a link only your coworkers can open.">
+<meta property="og:title" content="eze: private websites for your team">
+<meta property="og:description" content="Open-source hosting you run inside your company. Upload a folder of HTML, get a link only your coworkers can open.">
+<meta property="og:url" content="https://eze.page/">
+<meta property="og:type" content="website">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+
+<header>
+  <a class="logo" href="/" aria-label="eze home">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M8 16H24A8 8 0 1 0 22.13 21.14" fill="none" stroke="#fff" stroke-width="3.4"/></svg>
+    eze
+  </a>
+  <nav>
+    <a class="wide" href="#how">How it works</a>
+    <a href="#setup">Set up</a>
+    <a href="https://github.com/ahyield/eze">GitHub</a>
+  </nav>
+</header>
+
+<main>
+
+<div class="hero">
+  <h1>Turn a folder into a private website for your team.</h1>
+  <p>eze is open-source hosting you run inside your company. Upload some HTML and get a link that only your coworkers can open. Every site gets a database, live updates, file uploads and AI, with nothing to set up.</p>
+  <div class="buttons">
+    <a class="button" href="#setup">Set it up</a>
+    <a class="button quiet" href="https://github.com/ahyield/eze">GitHub</a>
+    <span class="small">Self-hosted. MIT license.</span>
+  </div>
+
+  <div class="picture" aria-hidden="true">
+    <div class="folder">
+      <div class="name">lunch-vote</div>
+      <ul>
+        <li>index.html</li>
+        <li>poll.js</li>
+        <li>style.css</li>
+      </ul>
+    </div>
+    <div class="wire"><span>eze deploy</span></div>
+    <div class="browser">
+      <div class="bar">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="address"><svg viewBox="0 0 12 12"><rect x="2" y="5" width="8" height="6" rx="1.5" fill="currentColor"/><path d="M4 5V3.5a2 2 0 0 1 4 0V5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>lunch-vote.eze.acme.com</div>
+      </div>
+      <div class="poll">
+        <h2>Where should we eat on Friday?</h2>
+        <div class="choice lead"><span>Ramen place on 5th</span><span class="count">9</span><div class="meter"><b style="--w: 64%"></b></div></div>
+        <div class="choice"><span>Tacos</span><span class="count">4</span><div class="meter"><b style="--w: 29%"></b></div></div>
+        <div class="choice"><span>Salad bar</span><span class="count">1</span><div class="meter"><b style="--w: 7%"></b></div></div>
+        <div class="here">
+          <div class="faces">
+            <span style="background:#2563eb">AN</span><span style="background:#0d9488">BO</span><span style="background:#9333ea">CY</span><span style="background:#ea580c">DE</span>
+          </div>
+          4 people from Acme are voting
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section id="how">
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><strong>Make a site</strong>Write plain HTML, CSS and JavaScript yourself, or ask your AI tool to.</li>
+    <li><strong>Deploy it</strong>Run <code>eze deploy</code> or drop the folder on the eze dashboard.</li>
+    <li><strong>Share the link</strong>Anyone signed in to your company can open it. Nobody else can.</li>
+  </ol>
+</section>
+
+<section>
+  <div class="two">
+    <div class="text">
+      <h2>A backend without a backend</h2>
+      <p>Pages load one script from eze and can save data, react to changes and know who is looking. They use the viewer's company sign-in, so there are no keys in your code.</p>
+    </div>
+<pre>&lt;script src="/_q/sdk.js"&gt;&lt;/script&gt;
+&lt;script type="module"&gt;
+  const me = await eze.id.me();
+  const votes = eze.db.collection('votes');
+
+  await votes.create({ place: 'Ramen', by: me.name });
+  votes.subscribe({ onCreate: (vote) =&gt; redraw() });
+&lt;/script&gt;</pre>
+  </div>
+  <ul class="gets">
+    <li><code>eze.db</code><span>Save and query data, with live updates</span></li>
+    <li><code>eze.files</code><span>Uploads like images, video and PDFs</span></li>
+    <li><code>eze.ws</code><span>Rooms for cursors, chat and games</span></li>
+    <li><code>eze.ai</code><span>Call Claude, OpenAI or your own model</span></li>
+    <li><code>eze.id</code><span>The name and email of whoever is viewing</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="two">
+    <div class="text">
+      <h2>Works with your AI tools</h2>
+      <p><code>eze init</code> adds instructions that teach coding agents how to build an eze site. <code>eze mcp</code> lets Claude Code, Cursor and other MCP apps deploy sites for you.</p>
+    </div>
+<pre>claude mcp add eze -- eze mcp
+
+<span class="dim">&gt; make a site where my team can vote
+  on where to eat on Friday</span></pre>
+  </div>
+</section>
+
+<section id="setup">
+  <div class="two">
+    <div class="text">
+      <h2>Set it up</h2>
+      <p>You need a server, a domain with wildcard DNS and HTTPS, and your company's sign-in: Google Workspace, Okta, Entra ID or any OpenID Connect provider, or an auth proxy you already use.</p>
+      <p>eze is one program with a small database file. A small VM is plenty.</p>
+      <p><a href="https://github.com/ahyield/eze/blob/main/docs/deploy.md">Read the setup guide</a></p>
+    </div>
+<pre>go install github.com/ahyield/eze/cmd/eze@latest
+
+EZE_DOMAIN=eze.acme.com \
+EZE_AUTH=oidc \
+EZE_OIDC_ISSUER=https://accounts.google.com \
+EZE_OIDC_CLIENT_ID=... \
+EZE_OIDC_CLIENT_SECRET=... \
+EZE_OIDC_ALLOWED_DOMAINS=acme.com \
+EZE_SESSION_SECRET=... \
+eze serve</pre>
+  </div>
+</section>
+
+<section>
+  <h2>Only for your company</h2>
+  <p>Everyone who can sign in can open, change and redeploy every site. That keeps eze simple, so keep it to your own people: eze won't start if its sign-in would let in a public email domain like gmail.com.</p>
+  <p>Found a security problem? <a href="https://github.com/ahyield/eze/security">Report it privately</a>.</p>
+</section>
+
+</main>
+
+<footer>
+  <span>eze is open source under the MIT license.</span>
+  <nav>
+    <a href="https://github.com/ahyield/eze">GitHub</a>
+    <a href="https://github.com/ahyield/eze/blob/main/docs/deploy.md">Setup guide</a>
+    <a href="https://github.com/ahyield/eze/blob/main/SECURITY.md">Security</a>
+  </nav>
+</footer>
+
+</div>
+</body>
+</html>
