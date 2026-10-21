@@ -24,7 +24,7 @@ claude "make a site where my team can vote on lunch spots in real time"
 eze deploy                   # live at https://lunch-vote.eze.example.com
 ```
 
-No terminal? Open `https://eze.example.com`, drop a folder, a `.zip` or a single HTML file on the page,
+No terminal? Open `https://eze.example.com`, drop a folder, a `.zip` or your HTML, CSS and JS files on the page,
 pick a name, and it's live. Each site has a page at `/sites/<name>` with its deploy history,
 uploaded files, AI usage, a drop zone for new versions, and delete.
 

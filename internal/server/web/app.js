@@ -60,10 +60,14 @@
       files = files.map((f) => ({ path: f.path.slice(f.path.indexOf('/') + 1), file: f.file }));
     }
     files = files.filter((f) => !skipped(f.path));
-    // A lone HTML file becomes the home page.
-    if (files.length === 1 && /\.html?$/i.test(files[0].path) && !files[0].path.includes('/')) {
-      name = name || slug(files[0].path);
-      files = [{ path: 'index.html', file: files[0].file }];
+    // Without an index.html, a single top-level HTML page becomes the home page. A lone
+    // file is just renamed; next to other files it keeps its own name too, so links to it work.
+    const top = files.filter((f) => !f.path.includes('/'));
+    const pages = top.filter((f) => /\.html?$/i.test(f.path));
+    if (pages.length === 1 && !top.some((f) => f.path === 'index.html')) {
+      name = name || slug(pages[0].path);
+      const home = { path: 'index.html', file: pages[0].file };
+      files = files.length === 1 ? [home] : [...files, home];
     }
     return { name, files };
   }
@@ -212,10 +216,6 @@
       }
       const { zip, files } = picked;
       if (!zip && !files.length) return fail('Nothing to deploy: no files left after skipping hidden files and node_modules.');
-      if (!zip && !files.some((f) => f.path === 'index.html')) {
-        // Allowed, but the site root would 404; say so before deploying.
-        picked.warning = 'There is no index.html at the top level, so the site root will show "not found".';
-      }
       busy = false;
       confirm(picked);
     }
@@ -260,7 +260,6 @@
         onsubmit: (e) => { e.preventDefault(); if (!deployBtn.disabled) deploy(nameInput.value.trim(), picked); },
       },
         el('p', { class: 'summary' }, 'Ready to deploy ' + what + '.'),
-        picked.warning ? el('p', { class: 'notice warn' }, picked.warning) : null,
         fixedName ? null : el('div', { class: 'row' }, el('label', {}, 'Site name'), nameInput, el('span', { class: 'suffix mono' }, '.' + domain)),
         status,
         el('div', { class: 'row' }, deployBtn, el('button', { class: 'btn', type: 'button', onclick: reset }, 'Cancel')),

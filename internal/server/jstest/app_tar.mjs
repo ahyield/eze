@@ -31,6 +31,23 @@ equal(paths(d), ['about.html', 'index.html'], 'loose files');
 d = fromFiles([f('Launch Plan.html')]);
 equal([d.name, paths(d)], ['launch-plan', ['index.html']], 'single html');
 
+// Loose files with one HTML page and no index.html: the page is also the home page.
+d = fromFiles([f('poll.html'), f('style.css'), f('app.js')]);
+equal([d.name, paths(d)], ['poll', ['app.js', 'index.html', 'poll.html', 'style.css']], 'one page becomes home');
+assert(d.files.find((x) => x.path === 'index.html').file === d.files.find((x) => x.path === 'poll.html').file, 'home is the same file');
+
+// The same inside a dropped folder keeps the folder's name.
+d = fromFiles([f('Lunch/vote.html'), f('Lunch/vote.css')]);
+equal([d.name, paths(d)], ['lunch', ['index.html', 'vote.css', 'vote.html']], 'folder with one page');
+
+// An existing index.html, several pages, or a page only in a subfolder are left alone.
+d = fromFiles([f('index.html'), f('style.css')]);
+equal(paths(d), ['index.html', 'style.css'], 'has index');
+d = fromFiles([f('a.html'), f('b.html'), f('style.css')]);
+equal([d.name, paths(d)], ['', ['a.html', 'b.html', 'style.css']], 'several pages');
+d = fromFiles([f('docs/page.html'), f('style.css')]);
+equal(paths(d), ['docs/page.html', 'style.css'], 'page in subfolder');
+
 // A zip is passed through untouched.
 d = fromFiles([f('Site Export.zip')]);
 assert(d.zip && d.name === 'site-export' && !d.files, 'zip', d.name);

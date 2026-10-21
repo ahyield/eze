@@ -28,10 +28,10 @@
 <section class="drop" data-drop data-site="{{.Name}}" data-domain="{{.Domain}}" data-scheme="{{.Scheme}}" data-max="{{.MaxDeployBytes}}">
   <div data-idle>
     <p class="title">{{if .Name}}Drop a new version of {{.Name}}{{else}}Drop a folder to deploy it{{end}}</p>
-    <p class="hint">A folder, a .zip, or a single HTML file. {{if .Name}}It replaces the whole site.{{else}}It goes live at <span class="mono">name.{{.Domain}}</span>{{end}}</p>
+    <p class="hint">A folder, a .zip, or your HTML, CSS and JS files. {{if .Name}}It replaces the whole site.{{else}}It goes live at <span class="mono">name.{{.Domain}}</span>{{end}}</p>
     <div class="actions">
       <label class="btn">Choose folder<input type="file" webkitdirectory multiple data-pick-folder></label>
-      <label class="btn">Choose .zip or file<input type="file" accept=".zip,.html,.htm" data-pick-file></label>
+      <label class="btn">Choose files<input type="file" multiple data-pick-file></label>
     </div>
   </div>
   <div class="stage" data-stage hidden></div>
