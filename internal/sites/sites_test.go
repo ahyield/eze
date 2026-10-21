@@ -441,3 +441,67 @@ func TestDeployTarLimitsCountEverything(t *testing.T) {
 		t.Errorf("large skipped entry: %v", err)
 	}
 }
+
+func TestHomePage(t *testing.T) {
+	for _, tt := range []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"poll.html", "style.css", "app.js"}, "poll.html"},
+		{[]string{"Plan.HTM", "404.html"}, "Plan.HTM"},
+		{[]string{"a.html", "b.html"}, ""},
+		{[]string{"404.html", "style.css"}, ""},
+		{[]string{"style.css"}, ""},
+		{nil, ""},
+	} {
+		if got := HomePage(tt.names); got != tt.want {
+			t.Errorf("HomePage(%v) = %q, want %q", tt.names, got, tt.want)
+		}
+	}
+}
+
+func TestDeploySinglePageBecomesHome(t *testing.T) {
+	eachBackend(t, func(t *testing.T, newStore func() *Store, mk newStoreFunc) {
+		s := newStore()
+		archive := testutil.TarGz(t,
+			testutil.Entry{Name: "poll.html", Body: "the poll"},
+			testutil.Entry{Name: "style.css", Body: "css"},
+			testutil.Entry{Name: "404.html", Body: "missing"},
+			testutil.Entry{Name: "docs/", Type: tar.TypeDir},
+			testutil.Entry{Name: "docs/page.html", Body: "nested"},
+		)
+		if _, _, err := s.Deploy("poll", bytes.NewReader(archive)); err != nil {
+			t.Fatal(err)
+		}
+		for path, want := range map[string]string{"/": "the poll", "/poll.html": "the poll", "/style.css": "css"} {
+			if w := get(s, "poll", path); w.Code != 200 || w.Body.String() != want {
+				t.Errorf("%s = %d %q", path, w.Code, w.Body)
+			}
+		}
+
+		// A zip from Finder (wrapped in a folder) gets the same treatment.
+		zip := testutil.Zip(t, testutil.Entry{Name: "Lunch/vote.html", Body: "vote"}, testutil.Entry{Name: "Lunch/vote.css", Body: "css"})
+		if _, _, err := s.Deploy("lunch", bytes.NewReader(zip)); err != nil {
+			t.Fatal(err)
+		}
+		if w := get(s, "lunch", "/"); w.Body.String() != "vote" {
+			t.Errorf("zip / = %d %q", w.Code, w.Body)
+		}
+
+		// Several pages, or an index.html of its own, are left alone.
+		several := testutil.TarGz(t, testutil.Entry{Name: "a.html", Body: "a"}, testutil.Entry{Name: "b.html", Body: "b"})
+		if _, _, err := s.Deploy("several", bytes.NewReader(several)); err != nil {
+			t.Fatal(err)
+		}
+		if w := get(s, "several", "/"); w.Code != 404 {
+			t.Errorf("several pages / = %d", w.Code)
+		}
+		own := testutil.TarGz(t, testutil.Entry{Name: "index.html", Body: "home"}, testutil.Entry{Name: "other.html", Body: "other"})
+		if _, _, err := s.Deploy("own", bytes.NewReader(own)); err != nil {
+			t.Fatal(err)
+		}
+		if w := get(s, "own", "/"); w.Body.String() != "home" {
+			t.Errorf("own index / = %q", w.Body)
+		}
+	})
+}

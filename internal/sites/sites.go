@@ -152,6 +152,9 @@ func (s *Store) Deploy(name string, archive io.Reader) (files int, bytes int64, 
 	if files == 0 {
 		return 0, 0, deployErr("archive contains no files")
 	}
+	if err := addHomePage(staging); err != nil {
+		return 0, 0, err
+	}
 
 	unlock := s.lock(name)
 	defer unlock()
@@ -160,6 +163,59 @@ func (s *Store) Deploy(name string, archive io.Reader) (files int, bytes int64, 
 	}
 	s.cleanupLater(name)
 	return files, bytes, nil
+}
+
+// HomePage picks the page to serve at a site's root when it has no index.html: its only
+// top-level HTML file, not counting 404.html. It returns "" when there is none or several.
+func HomePage(topLevel []string) string {
+	page := ""
+	for _, n := range topLevel {
+		ext := strings.ToLower(path.Ext(n))
+		if (ext != ".html" && ext != ".htm") || strings.EqualFold(n, "404.html") {
+			continue
+		}
+		if page != "" {
+			return ""
+		}
+		page = n
+	}
+	return page
+}
+
+// addHomePage copies the HomePage of a staged site to index.html when it has none, so a
+// deploy of poll.html with its CSS and JS works at the root. poll.html keeps working too.
+func addHomePage(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var names []string
+	for _, e := range entries {
+		if e.Name() == "index.html" {
+			return nil
+		}
+		if e.Type().IsRegular() {
+			names = append(names, e.Name())
+		}
+	}
+	page := HomePage(names)
+	if page == "" {
+		return nil
+	}
+	src, err := os.Open(filepath.Join(dir, page))
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	dst, err := os.OpenFile(filepath.Join(dir, "index.html"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		return err
+	}
+	return dst.Close()
 }
 
 // Import publishes an existing directory of site files as is, for moving local sites into a bucket.

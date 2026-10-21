@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ahyield/eze/internal/sites"
 )
 
 const projectFile = "eze.json"
@@ -134,8 +136,8 @@ func deployDir(c *client, dir, siteName string, starting func(files int, size in
 		return nil, fmt.Errorf("nothing to deploy in %s", dir)
 	}
 	res := &deployResult{Files: files}
-	if _, err := os.Stat(filepath.Join(abs, "index.html")); err != nil {
-		res.Warning = "no index.html at the top level, so the site root will show \"not found\""
+	if !hasHomePage(abs) {
+		res.Warning = "no index.html or single HTML page at the top level, so the site root will show \"not found\""
 	}
 	if starting != nil {
 		starting(files, int64(buf.Len()), name)
@@ -149,6 +151,25 @@ func deployDir(c *client, dir, siteName string, starting func(files int, size in
 		}
 	}
 	return res, nil
+}
+
+// hasHomePage reports whether the site root will have a page: an index.html, or a single
+// top-level HTML page that the server also serves as the home page (see sites.HomePage).
+func hasHomePage(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	var names []string
+	for _, e := range entries {
+		if e.Name() == "index.html" {
+			return true
+		}
+		if e.Type().IsRegular() && !strings.HasPrefix(e.Name(), ".") && !skipped[e.Name()] {
+			names = append(names, e.Name())
+		}
+	}
+	return sites.HomePage(names) != ""
 }
 
 // pack writes dir as a gzipped tarball, skipping hidden files (except .well-known), symlinks and local-only files.

@@ -278,3 +278,22 @@ func TestTokensAndLogout(t *testing.T) {
 		t.Errorf("calls = %v", calls)
 	}
 }
+
+func TestHasHomePage(t *testing.T) {
+	for _, tt := range []struct {
+		files map[string]string
+		want  bool
+	}{
+		{map[string]string{"index.html": "x", "a.html": "y"}, true},
+		{map[string]string{"poll.html": "x", "style.css": "y", "404.html": "z"}, true},
+		{map[string]string{"a.html": "x", "b.html": "y"}, false},
+		{map[string]string{"docs/page.html": "x", "style.css": "y"}, false},
+		{map[string]string{"page.html": "x", ".draft.html": "y", "CLAUDE.md": "z"}, true},
+	} {
+		dir := t.TempDir()
+		write(t, dir, tt.files)
+		if got := hasHomePage(dir); got != tt.want {
+			t.Errorf("hasHomePage(%v) = %v, want %v", tt.files, got, tt.want)
+		}
+	}
+}

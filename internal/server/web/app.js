@@ -60,15 +60,11 @@
       files = files.map((f) => ({ path: f.path.slice(f.path.indexOf('/') + 1), file: f.file }));
     }
     files = files.filter((f) => !skipped(f.path));
-    // Without an index.html, a single top-level HTML page becomes the home page. A lone
-    // file is just renamed; next to other files it keeps its own name too, so links to it work.
+    // Without an index.html, the server serves a single top-level HTML page as the home
+    // page (see sites.HomePage); name the site after it.
     const top = files.filter((f) => !f.path.includes('/'));
-    const pages = top.filter((f) => /\.html?$/i.test(f.path));
-    if (pages.length === 1 && !top.some((f) => f.path === 'index.html')) {
-      name = name || slug(pages[0].path);
-      const home = { path: 'index.html', file: pages[0].file };
-      files = files.length === 1 ? [home] : [...files, home];
-    }
+    const pages = top.filter((f) => /\.html?$/i.test(f.path) && f.path.toLowerCase() !== '404.html');
+    if (pages.length === 1 && !top.some((f) => f.path === 'index.html')) name = name || slug(pages[0].path);
     return { name, files };
   }
 

@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/ahyield/eze/internal/sites"
 )
 
 const mcpInstructions = `eze hosts small web apps for an organisation: a folder of static files
@@ -286,6 +288,7 @@ func packFiles(files []inlineFile, w *bytes.Buffer) (warning string, err error) 
 	tw := tar.NewWriter(gz)
 	seen := map[string]bool{}
 	hasIndex := false
+	var topLevel []string
 	for _, f := range files {
 		name := strings.TrimPrefix(path.Clean("/"+strings.ReplaceAll(f.Path, "\\", "/")), "/")
 		if f.Path == "" || strings.Contains(f.Path, "..") || name == "" {
@@ -296,6 +299,9 @@ func packFiles(files []inlineFile, w *bytes.Buffer) (warning string, err error) 
 		}
 		seen[name] = true
 		hasIndex = hasIndex || name == "index.html"
+		if !strings.Contains(name, "/") {
+			topLevel = append(topLevel, name)
+		}
 		body := []byte(f.Content)
 		if f.Base64 {
 			if body, err = base64.StdEncoding.DecodeString(f.Content); err != nil {
@@ -315,8 +321,8 @@ func packFiles(files []inlineFile, w *bytes.Buffer) (warning string, err error) 
 	if err := gz.Close(); err != nil {
 		return "", err
 	}
-	if !hasIndex {
-		warning = "no index.html, so the site root will show \"not found\""
+	if !hasIndex && sites.HomePage(topLevel) == "" {
+		warning = "no index.html or single HTML page at the top level, so the site root will show \"not found\""
 	}
 	return warning, nil
 }

@@ -237,9 +237,14 @@ func TestMCPToolErrors(t *testing.T) {
 			t.Errorf("%s %v: error %q, want it to mention %q", tt.tool, tt.args, text, tt.want)
 		}
 	}
-	out, _ := e.call("deploy_files", map[string]any{"site": "no-index", "files": []map[string]any{{"path": "about.html", "content": "x"}}}, false)
-	if !strings.Contains(out["warning"].(string), "index.html") {
+	out, _ := e.call("deploy_files", map[string]any{"site": "no-index", "files": []map[string]any{{"path": "a.html", "content": "x"}, {"path": "b.html", "content": "y"}}}, false)
+	if w, _ := out["warning"].(string); !strings.Contains(w, "index.html") {
 		t.Errorf("missing index.html warning: %v", out)
+	}
+	// A single page is served as the home page, so there's nothing to warn about.
+	out, _ = e.call("deploy_files", map[string]any{"site": "one-page", "files": []map[string]any{{"path": "about.html", "content": "x"}, {"path": "a.css", "content": "y"}}}, false)
+	if out["warning"] != nil {
+		t.Errorf("single page warned: %v", out)
 	}
 }
 

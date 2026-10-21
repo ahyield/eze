@@ -27,26 +27,23 @@ d = fromFiles([f('index.html'), f('about.html')]);
 equal(d.name, '', 'loose files have no name');
 equal(paths(d), ['about.html', 'index.html'], 'loose files');
 
-// A lone HTML file becomes the home page.
+// A lone HTML file names the site; the server makes it the home page.
 d = fromFiles([f('Launch Plan.html')]);
-equal([d.name, paths(d)], ['launch-plan', ['index.html']], 'single html');
+equal([d.name, paths(d)], ['launch-plan', ['Launch Plan.html']], 'single html');
 
-// Loose files with one HTML page and no index.html: the page is also the home page.
-d = fromFiles([f('poll.html'), f('style.css'), f('app.js')]);
-equal([d.name, paths(d)], ['poll', ['app.js', 'index.html', 'poll.html', 'style.css']], 'one page becomes home');
-assert(d.files.find((x) => x.path === 'index.html').file === d.files.find((x) => x.path === 'poll.html').file, 'home is the same file');
+// Loose files with one HTML page and no index.html are named after the page.
+d = fromFiles([f('poll.html'), f('style.css'), f('app.js'), f('404.html')]);
+equal([d.name, paths(d)], ['poll', ['404.html', 'app.js', 'poll.html', 'style.css']], 'one page names the site');
 
-// The same inside a dropped folder keeps the folder's name.
+// A dropped folder's name wins.
 d = fromFiles([f('Lunch/vote.html'), f('Lunch/vote.css')]);
-equal([d.name, paths(d)], ['lunch', ['index.html', 'vote.css', 'vote.html']], 'folder with one page');
+equal(d.name, 'lunch', 'folder with one page');
 
-// An existing index.html, several pages, or a page only in a subfolder are left alone.
+// An existing index.html or several pages leave the name to the person.
 d = fromFiles([f('index.html'), f('style.css')]);
-equal(paths(d), ['index.html', 'style.css'], 'has index');
+equal(d.name, '', 'has index');
 d = fromFiles([f('a.html'), f('b.html'), f('style.css')]);
-equal([d.name, paths(d)], ['', ['a.html', 'b.html', 'style.css']], 'several pages');
-d = fromFiles([f('docs/page.html'), f('style.css')]);
-equal(paths(d), ['docs/page.html', 'style.css'], 'page in subfolder');
+equal(d.name, '', 'several pages');
 
 // A zip is passed through untouched.
 d = fromFiles([f('Site Export.zip')]);

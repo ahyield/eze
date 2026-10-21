@@ -8,7 +8,7 @@ organisation can open it.
 
 - No build step is required. Plain HTML/CSS/JS in this folder is what gets served. If you do use a
   bundler, deploy its output folder: `eze deploy dist`.
-- `index.html` at the top level is the home page. A top-level `404.html` is used for missing paths.
+- `index.html` at the top level is the home page. Without one, a single top-level HTML page is served as the home page instead. A top-level `404.html` is used for missing paths.
 - Load libraries from a CDN (e.g. `https://cdn.jsdelivr.net/npm/...`) or vendor them into the folder.
 - Hidden files, `node_modules`, `AGENTS.md`, `CLAUDE.md` and `eze.json` are never uploaded.
 - There is no server-side code. Anything dynamic uses the browser SDK below.
