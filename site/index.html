@@ -42,8 +42,14 @@
     try { saved = localStorage.getItem('theme'); } catch (e) {}
     if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
     var dark = matchMedia('(prefers-color-scheme: dark)');
+    var colors = document.querySelectorAll('meta[name="theme-color"]');
     function show() {
       root.dataset.shown = root.dataset.theme || (dark.matches ? 'dark' : 'light');
+      // A chosen theme pins the browser bar colour; otherwise each tag keeps its media query.
+      colors.forEach(function (meta) {
+        var scheme = /dark/.test(meta.dataset.media || (meta.dataset.media = meta.media)) ? 'dark' : 'light';
+        meta.media = !root.dataset.theme ? meta.dataset.media : scheme === root.dataset.theme ? 'all' : 'not all';
+      });
       var button = document.querySelector('.theme');
       if (button) button.setAttribute('aria-pressed', root.dataset.shown === 'dark');
     }
