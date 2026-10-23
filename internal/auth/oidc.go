@@ -25,9 +25,9 @@ const (
 	sessionTTL    = 7 * 24 * time.Hour
 	loginTTL      = 10 * time.Minute
 
-	LoginPath    = "/_q/auth/login"
-	CallbackPath = "/_q/auth/callback"
-	LogoutPath   = "/_q/auth/logout"
+	LoginPath    = "/_eze/auth/login"
+	CallbackPath = "/_eze/auth/callback"
+	LogoutPath   = "/_eze/auth/logout"
 )
 
 type OIDCConfig struct {
@@ -122,7 +122,7 @@ func (o *OIDC) login(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     loginCookie,
 		Value:    o.seal(st),
-		Path:     "/_q/auth/",
+		Path:     "/_eze/auth/",
 		MaxAge:   int(loginTTL.Seconds()),
 		HttpOnly: true,
 		Secure:   o.cfg.Scheme == "https",
@@ -138,7 +138,7 @@ func (o *OIDC) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Login expired, please try again.", http.StatusBadRequest)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: loginCookie, Path: "/_q/auth/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: loginCookie, Path: "/_eze/auth/", MaxAge: -1})
 
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {

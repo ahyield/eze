@@ -41,7 +41,7 @@ deploy() {
   if [ -n "${2:-}" ]; then echo old >"$WORK/src/old.html"; fi
   tar -czf "$WORK/site.tgz" -C "$WORK/src" .
   curl -sS -o /dev/null -w '%{http_code}' -X PUT -H "Origin: http://localhost:$PORT" \
-    --data-binary @"$WORK/site.tgz" "http://localhost:$PORT/_q/sites/blog"
+    --data-binary @"$WORK/site.tgz" "http://localhost:$PORT/_eze/sites/blog"
 }
 
 start
@@ -55,7 +55,7 @@ expect "old file gone" "$(site -o /dev/null -w '%{http_code}' "http://127.0.0.1:
 
 head -c 200000 /dev/urandom >"$WORK/clip.mp4"
 URL=$(site -X POST -H "Origin: http://blog.localhost:$PORT" -F "file=@$WORK/clip.mp4;type=video/mp4" \
-  "http://127.0.0.1:$PORT/_q/files" | sed -E 's/.*"url":"([^"]+)".*/\1/')
+  "http://127.0.0.1:$PORT/_eze/files" | sed -E 's/.*"url":"([^"]+)".*/\1/')
 site -o "$WORK/got" "http://127.0.0.1:$PORT$URL"
 expect "upload round trip" "$(cmp -s "$WORK/got" "$WORK/clip.mp4" && echo same)" same
 CODE=$(site -o "$WORK/part" -w '%{http_code}' -H 'Range: bytes=1000-1099' "http://127.0.0.1:$PORT$URL")
@@ -66,7 +66,7 @@ stop
 start
 expect "site after restart" "$(site "http://127.0.0.1:$PORT/")" v2
 expect "upload after restart" "$(site -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$URL")" 200
-expect "delete" "$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE -H "Origin: http://localhost:$PORT" "http://localhost:$PORT/_q/sites/blog")" 204
+expect "delete" "$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE -H "Origin: http://localhost:$PORT" "http://localhost:$PORT/_eze/sites/blog")" 204
 expect "gone after delete" "$(site -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")" 404
 if [ -n "$STORAGE" ]; then
   expect "nothing on local disk" "$(ls "$WORK/data/sites" "$WORK/data/uploads" 2>/dev/null | wc -l | tr -d ' ')" 0

@@ -1,4 +1,4 @@
-// eze client SDK. Include with <script src="/_q/sdk.js"></script> and use window.eze.
+// eze client SDK. Include with <script src="/_eze/sdk.js"></script> and use window.eze.
 // Every call is same-origin and authenticated by your existing sign-in, so there are no keys to manage.
 (() => {
   'use strict';
@@ -17,7 +17,7 @@
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body);
     }
-    const res = await fetch('/_q' + path, init);
+    const res = await fetch('/_eze' + path, init);
     if (res.status === 204) return null;
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new EzeError(res.status, (data && data.error) || res.statusText);
@@ -27,7 +27,7 @@
   const enc = encodeURIComponent;
 
   function wsURL(path) {
-    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/_q' + path;
+    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/_eze' + path;
   }
 
   // backoff returns the reconnect delay for attempt n: exponential, capped at 30s, with jitter.
@@ -324,7 +324,7 @@
         effort: opts.effort,
         stream: Boolean(opts.onText),
       };
-      const res = await fetch('/_q/ai/chat', {
+      const res = await fetch('/_eze/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
@@ -371,7 +371,7 @@
       // XHR rather than fetch, because fetch can't report upload progress.
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/_q/files');
+        xhr.open('POST', '/_eze/files');
         xhr.responseType = 'json';
         if (opts.onProgress) {
           xhr.upload.onprogress = (e) => { if (e.lengthComputable) opts.onProgress(e.loaded / e.total); };

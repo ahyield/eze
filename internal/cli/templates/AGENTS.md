@@ -19,7 +19,7 @@ organisation can open it.
 Add this before your own scripts. It is served by eze itself, same origin, no keys needed:
 
 ```html
-<script src="/_q/sdk.js"></script>
+<script src="/_eze/sdk.js"></script>
 ```
 
 It defines `window.eze`.

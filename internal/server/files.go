@@ -28,7 +28,7 @@ type fileResponse struct {
 }
 
 func fileURL(f *store.File) string {
-	return "/_q/files/" + f.ID + "/" + url.PathEscape(f.Name)
+	return "/_eze/files/" + f.ID + "/" + url.PathEscape(f.Name)
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

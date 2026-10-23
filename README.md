@@ -51,7 +51,7 @@ gmail.com. See [SECURITY.md](SECURITY.md).
 ## The browser SDK
 
 ```html
-<script src="/_q/sdk.js"></script>
+<script src="/_eze/sdk.js"></script>
 <script>
   const me = await eze.id.me();                       // { email, name }
   const posts = eze.db.collection('posts');
@@ -106,7 +106,7 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 | `EZE_DATA_DIR` | `./data` | `eze.db`, plus deployed sites and uploads unless `EZE_STORAGE` is set. Back this up. |
 | `EZE_STORAGE` | | Keep sites and uploads in a bucket instead: `s3://bucket?region=...`, `gs://bucket`, or any S3-compatible store. See [Storing files in a bucket](docs/deploy.md#storing-files-in-a-bucket). |
 | `EZE_OVERWRITE` | `anyone` | `anyone` or `owner` (first deployer owns the site). |
-| `EZE_OIDC_ISSUER`, `EZE_OIDC_CLIENT_ID`, `EZE_OIDC_CLIENT_SECRET` | | OIDC client. Redirect URI: `https://<EZE_DOMAIN>/_q/auth/callback`. |
+| `EZE_OIDC_ISSUER`, `EZE_OIDC_CLIENT_ID`, `EZE_OIDC_CLIENT_SECRET` | | OIDC client. Redirect URI: `https://<EZE_DOMAIN>/_eze/auth/callback`. |
 | `EZE_OIDC_ALLOWED_DOMAINS` | | Comma-separated email domains allowed to sign in. Required for OIDC. |
 | `EZE_OIDC_ALLOW_PUBLIC_DOMAINS` | | Set to `true` to allow public email domains (gmail.com...) above. You almost certainly don't want this. |
 | `EZE_OIDC_ALLOW_UNVERIFIED_EMAIL` | | Set to `true` for providers that never send `email_verified` (e.g. Entra ID). Only safe if users can't edit their own email there. |

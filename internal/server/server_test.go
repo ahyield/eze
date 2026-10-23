@@ -141,7 +141,7 @@ func (e *env) do(r req) *httptest.ResponseRecorder {
 
 func (e *env) deploy(site, as string, files map[string]string) *httptest.ResponseRecorder {
 	e.t.Helper()
-	return e.do(req{method: "PUT", url: "https://eze.test/_q/sites/" + site, as: as, body: bytes.NewReader(testutil.Files(e.t, files))})
+	return e.do(req{method: "PUT", url: "https://eze.test/_eze/sites/" + site, as: as, body: bytes.NewReader(testutil.Files(e.t, files))})
 }
 
 // bearer mints an API token for email and returns the header that carries it.
@@ -196,7 +196,7 @@ func TestHostRouting(t *testing.T) {
 func TestRequiresAuth(t *testing.T) {
 	e := newEnv(t)
 	e.deploy("blog", ana, map[string]string{"index.html": "secret"})
-	for _, u := range []string{"https://blog.eze.test/", "https://blog.eze.test/_q/db/posts", "https://eze.test/", "https://eze.test/_q/api/sites"} {
+	for _, u := range []string{"https://blog.eze.test/", "https://blog.eze.test/_eze/db/posts", "https://eze.test/", "https://eze.test/_eze/api/sites"} {
 		w := e.do(req{url: u})
 		if w.Code != 401 || strings.Contains(w.Body.String(), "secret") {
 			t.Errorf("anonymous %s = %d", u, w.Code)
@@ -206,7 +206,7 @@ func TestRequiresAuth(t *testing.T) {
 	if w := e.do(req{url: "https://blog.eze.test/", as: ana, remote: "203.0.113.7:1234"}); w.Code != 401 {
 		t.Errorf("untrusted peer = %d", w.Code)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", headers: map[string]string{"Authorization": "Bearer eze_bogus"}}); w.Code != 401 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/db/posts", headers: map[string]string{"Authorization": "Bearer eze_bogus"}}); w.Code != 401 {
 		t.Errorf("bogus token = %d", w.Code)
 	}
 }
@@ -234,7 +234,7 @@ func testDeployListDelete(t *testing.T, e *env) {
 	if w := e.deploy("blog", bo, map[string]string{"index.html": "v2"}); w.Code != 200 {
 		t.Fatalf("overwrite = %d %s", w.Code, w.Body)
 	}
-	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/sites", headers: e.bearer(ana)}))
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_eze/api/sites", headers: e.bearer(ana)}))
 	if len(list) != 1 || list[0]["deployed_by"] != bo || list[0]["owner"] != ana {
 		t.Errorf("list = %v", list)
 	}
@@ -242,22 +242,22 @@ func testDeployListDelete(t *testing.T, e *env) {
 		t.Errorf("index page does not link the site")
 	}
 
-	e.do(req{method: "POST", url: "https://blog.eze.test/_q/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})})
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 204 {
+	e.do(req{method: "POST", url: "https://blog.eze.test/_eze/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})})
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: bo}); w.Code != 204 {
 		t.Fatalf("delete = %d %s", w.Code, w.Body)
 	}
 	if w := e.do(req{url: "https://blog.eze.test/", as: ana}); w.Code != 404 {
 		t.Errorf("deleted site = %d", w.Code)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana}); w.Code != 404 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: ana}); w.Code != 404 {
 		t.Errorf("APIs of a deleted site = %d, want 404", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 404 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: bo}); w.Code != 404 {
 		t.Errorf("delete again = %d", w.Code)
 	}
 	// A new site under the same name starts empty.
 	e.deploy("blog", ana, map[string]string{"index.html": "new"})
-	if docs := decode[[]any](t, e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana})); len(docs) != 0 {
+	if docs := decode[[]any](t, e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: ana})); len(docs) != 0 {
 		t.Errorf("recreated site inherited docs: %v", docs)
 	}
 }
@@ -270,13 +270,13 @@ func TestDeployErrors(t *testing.T) {
 	if w := e.deploy("Bad_Name", ana, map[string]string{"index.html": "x"}); w.Code != 400 {
 		t.Errorf("invalid name = %d", w.Code)
 	}
-	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: strings.NewReader("not a tarball")}); w.Code != 400 {
+	if w := e.do(req{method: "PUT", url: "https://eze.test/_eze/sites/blog", as: ana, body: strings.NewReader("not a tarball")}); w.Code != 400 {
 		t.Errorf("bad archive = %d", w.Code)
 	}
 	noise := make([]byte, 8<<10) // random bytes don't compress, so the archive exceeds 512 bytes
 	rand.Read(noise)
 	big := testutil.Files(t, map[string]string{"blob.bin": string(noise)})
-	if w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: bytes.NewReader(big)}); w.Code != 413 {
+	if w := e.do(req{method: "PUT", url: "https://eze.test/_eze/sites/blog", as: ana, body: bytes.NewReader(big)}); w.Code != 413 {
 		t.Errorf("too large = %d %s", w.Code, w.Body)
 	}
 }
@@ -289,7 +289,7 @@ func TestOwnerPolicy(t *testing.T) {
 	if w := e.deploy("blog", bo, map[string]string{"index.html": "v2"}); w.Code != 403 {
 		t.Errorf("non-owner deploy = %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: bo}); w.Code != 403 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: bo}); w.Code != 403 {
 		t.Errorf("non-owner delete = %d", w.Code)
 	}
 	if w := e.deploy("blog", ana, map[string]string{"index.html": "v3"}); w.Code != 200 {
@@ -308,36 +308,36 @@ func TestTokenAuth(t *testing.T) {
 	}
 	// Tokens work from any address, e.g. a laptop going around the auth proxy.
 	bearer := map[string]string{"Authorization": "Bearer " + token}
-	w := e.do(req{url: "https://eze.test/_q/api/me", headers: bearer, remote: "203.0.113.7:1234"})
+	w := e.do(req{url: "https://eze.test/_eze/api/me", headers: bearer, remote: "203.0.113.7:1234"})
 	if me := decode[map[string]any](t, w); me["email"] != ana || me["name"] != "Ana" {
 		t.Errorf("me = %v", me)
 	}
-	w = e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", headers: bearer, remote: "203.0.113.7:1234",
+	w = e.do(req{method: "PUT", url: "https://eze.test/_eze/sites/blog", headers: bearer, remote: "203.0.113.7:1234",
 		body: bytes.NewReader(testutil.Files(t, map[string]string{"index.html": "x"}))})
 	if w.Code != 200 {
 		t.Errorf("token deploy = %d %s", w.Code, w.Body)
 	}
 }
 
-// The docs tell operators to let /_q/api/ past their auth proxy for the CLI, so identity
+// The docs tell operators to let /_eze/api/ past their auth proxy for the CLI, so identity
 // headers there may come straight from a client. Only tokens count on those routes.
 func TestAPIRoutesRequireToken(t *testing.T) {
 	e := newEnv(t)
 	archive := testutil.Files(t, map[string]string{"index.html": "x"})
 	for _, r := range []req{
-		{url: "https://eze.test/_q/api/me", as: ana},
-		{url: "https://eze.test/_q/api/sites", as: ana},
-		{method: "PUT", url: "https://eze.test/_q/api/sites/fresh", as: ana, body: bytes.NewReader(archive)},
-		{method: "DELETE", url: "https://eze.test/_q/api/sites/fresh", as: ana},
+		{url: "https://eze.test/_eze/api/me", as: ana},
+		{url: "https://eze.test/_eze/api/sites", as: ana},
+		{method: "PUT", url: "https://eze.test/_eze/api/sites/fresh", as: ana, body: bytes.NewReader(archive)},
+		{method: "DELETE", url: "https://eze.test/_eze/api/sites/fresh", as: ana},
 	} {
 		if w := e.do(r); w.Code != 401 {
 			t.Errorf("%s %s with a proxy header = %d, want 401", r.method, r.url, w.Code)
 		}
 	}
 	if e.srv.sites.Exists("fresh") {
-		t.Fatal("header identity deployed through /_q/api/")
+		t.Fatal("header identity deployed through /_eze/api/")
 	}
-	w := e.do(req{method: "PUT", url: "https://eze.test/_q/api/sites/fresh", headers: e.bearer(ana), body: bytes.NewReader(archive)})
+	w := e.do(req{method: "PUT", url: "https://eze.test/_eze/api/sites/fresh", headers: e.bearer(ana), body: bytes.NewReader(archive)})
 	if w.Code != 200 {
 		t.Errorf("token deploy = %d %s", w.Code, w.Body)
 	}
@@ -346,15 +346,15 @@ func TestAPIRoutesRequireToken(t *testing.T) {
 		t.Errorf("dashboard deploy = %d %s", w.Code, w.Body)
 	}
 	// Site APIs keep working with normal sign-in.
-	if w := e.do(req{url: "https://blog.eze.test/_q/me", as: ana}); w.Code != 200 {
-		t.Errorf("site /_q/me = %d", w.Code)
+	if w := e.do(req{url: "https://blog.eze.test/_eze/me", as: ana}); w.Code != 200 {
+		t.Errorf("site /_eze/me = %d", w.Code)
 	}
 }
 
 func TestCrossOriginWrites(t *testing.T) {
 	e := newEnv(t)
 	post := func(headers map[string]string) int {
-		return e.do(req{method: "POST", url: "https://blog.eze.test/_q/db/posts", as: ana, headers: headers, body: jsonBody(map[string]any{"a": 1})}).Code
+		return e.do(req{method: "POST", url: "https://blog.eze.test/_eze/db/posts", as: ana, headers: headers, body: jsonBody(map[string]any{"a": 1})}).Code
 	}
 	if c := post(nil); c != 201 {
 		t.Errorf("no origin headers = %d", c)
@@ -372,19 +372,19 @@ func TestCrossOriginWrites(t *testing.T) {
 		t.Errorf("cross-site fetch = %d", c)
 	}
 	// Reads are not blocked; the browser's same-origin policy keeps responses private.
-	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 200 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 200 {
 		t.Errorf("cross-origin read = %d", w.Code)
 	}
 	// Deleting a site from another site's page is blocked too.
 	e.deploy("blog", ana, map[string]string{"index.html": "x"})
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 403 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: ana, headers: map[string]string{"Origin": "https://evil.eze.test"}}); w.Code != 403 {
 		t.Errorf("cross-origin site delete = %d", w.Code)
 	}
 }
 
 func TestDocAPI(t *testing.T) {
 	e := newEnv(t)
-	base := "https://blog.eze.test/_q/db/posts"
+	base := "https://blog.eze.test/_eze/db/posts"
 
 	w := e.do(req{method: "POST", url: base, as: ana, body: jsonBody(map[string]any{"title": "Hi", "status": "draft"})})
 	if w.Code != 201 {
@@ -434,7 +434,7 @@ func TestDocAPI(t *testing.T) {
 
 func TestDocAPIValidation(t *testing.T) {
 	e := newEnv(t)
-	base := "https://blog.eze.test/_q/db"
+	base := "https://blog.eze.test/_eze/db"
 	for _, tt := range []struct {
 		name string
 		r    req
@@ -453,7 +453,7 @@ func TestDocAPIValidation(t *testing.T) {
 		{"null body", req{method: "POST", url: base + "/posts", body: strings.NewReader(`null`)}, 400},
 		{"invalid json", req{method: "POST", url: base + "/posts", body: strings.NewReader(`{`)}, 400},
 		{"too large", req{method: "POST", url: base + "/posts", body: jsonBody(map[string]any{"x": strings.Repeat("a", 5000)})}, 413},
-		{"unknown endpoint", req{url: "https://blog.eze.test/_q/nope"}, 404},
+		{"unknown endpoint", req{url: "https://blog.eze.test/_eze/nope"}, 404},
 	} {
 		tt.r.as = ana
 		if w := e.do(tt.r); w.Code != tt.code {
@@ -465,39 +465,39 @@ func TestDocAPIValidation(t *testing.T) {
 func TestSiteAPIsNeedADeployedSite(t *testing.T) {
 	e := newEnv(t)
 	for _, r := range []req{
-		{url: "https://made-up.eze.test/_q/db/posts", as: ana},
-		{method: "POST", url: "https://made-up.eze.test/_q/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})},
-		{url: "https://made-up.eze.test/_q/files", as: ana},
-		{url: "https://made-up.eze.test/_q/me", as: ana},
+		{url: "https://made-up.eze.test/_eze/db/posts", as: ana},
+		{method: "POST", url: "https://made-up.eze.test/_eze/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})},
+		{url: "https://made-up.eze.test/_eze/files", as: ana},
+		{url: "https://made-up.eze.test/_eze/me", as: ana},
 	} {
 		if w := e.do(r); w.Code != 404 || !strings.Contains(w.Body.String(), "deploy it first") {
 			t.Errorf("%s %s = %d %s", r.method, r.url, w.Code, w.Body)
 		}
 	}
 	// Signed-out visitors learn nothing about which sites exist.
-	if w := e.do(req{url: "https://made-up.eze.test/_q/db/posts"}); w.Code != 401 {
+	if w := e.do(req{url: "https://made-up.eze.test/_eze/db/posts"}); w.Code != 401 {
 		t.Errorf("anonymous = %d", w.Code)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana}); w.Code != 200 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: ana}); w.Code != 200 {
 		t.Errorf("deployed site = %d", w.Code)
 	}
 }
 
 func TestDocsIsolatedPerSite(t *testing.T) {
 	e := newEnv(t)
-	e.do(req{method: "POST", url: "https://a.eze.test/_q/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})})
-	if list := decode[[]any](t, e.do(req{url: "https://b.eze.test/_q/db/posts", as: ana})); len(list) != 0 {
+	e.do(req{method: "POST", url: "https://a.eze.test/_eze/db/posts", as: ana, body: jsonBody(map[string]any{"x": 1})})
+	if list := decode[[]any](t, e.do(req{url: "https://b.eze.test/_eze/db/posts", as: ana})); len(list) != 0 {
 		t.Errorf("site b sees site a's docs: %v", list)
 	}
 }
 
 func TestMeAndSDK(t *testing.T) {
 	e := newEnv(t)
-	w := e.do(req{url: "https://blog.eze.test/_q/me", as: ana, headers: map[string]string{"X-Name": "Ana Lima"}})
+	w := e.do(req{url: "https://blog.eze.test/_eze/me", as: ana, headers: map[string]string{"X-Name": "Ana Lima"}})
 	if me := decode[map[string]any](t, w); me["email"] != ana || me["name"] != "Ana Lima" {
 		t.Errorf("me = %v", me)
 	}
-	w = e.do(req{url: "https://blog.eze.test/_q/sdk.js", as: ana})
+	w = e.do(req{url: "https://blog.eze.test/_eze/sdk.js", as: ana})
 	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Type"), "javascript") || !strings.Contains(w.Body.String(), "window.eze") {
 		t.Errorf("sdk = %d %q", w.Code, w.Header().Get("Content-Type"))
 	}
@@ -508,12 +508,12 @@ func TestRateLimit(t *testing.T) {
 	e.deploy("blog", ana, map[string]string{"index.html": "x"}) // uses one token from ana's bucket
 	codes := []int{}
 	for range 3 {
-		codes = append(codes, e.do(req{url: "https://blog.eze.test/_q/db/posts", as: ana}).Code)
+		codes = append(codes, e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: ana}).Code)
 	}
 	if codes[0] != 200 || codes[1] != 429 || codes[2] != 429 {
 		t.Errorf("codes = %v", codes)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/db/posts", as: bo}); w.Code != 200 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/db/posts", as: bo}); w.Code != 200 {
 		t.Errorf("other user limited: %d", w.Code)
 	}
 	if w := e.do(req{url: "https://blog.eze.test/", as: ana}); w.Code != 200 {
@@ -524,13 +524,13 @@ func TestRateLimit(t *testing.T) {
 func TestCLIAuthorize(t *testing.T) {
 	e := newEnv(t)
 	state := "abcdefghijklmnopqrstuvwxyz"
-	page := "https://eze.test/_q/cli/authorize?port=50123&state=" + state
+	page := "https://eze.test/_eze/cli/authorize?port=50123&state=" + state
 
 	if w := e.do(req{url: page}); w.Code != 401 {
 		t.Errorf("anonymous = %d", w.Code)
 	}
 	for _, bad := range []string{"?port=80&state=" + state, "?port=50123&state=short", "?port=x&state=" + state} {
-		if w := e.do(req{url: "https://eze.test/_q/cli/authorize" + bad, as: ana}); w.Code != 400 {
+		if w := e.do(req{url: "https://eze.test/_eze/cli/authorize" + bad, as: ana}); w.Code != 400 {
 			t.Errorf("%s = %d", bad, w.Code)
 		}
 	}
@@ -540,7 +540,7 @@ func TestCLIAuthorize(t *testing.T) {
 
 	form := url.Values{"port": {"50123"}, "state": {state}}.Encode()
 	formHeaders := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
-	w := e.do(req{method: "POST", url: "https://eze.test/_q/cli/authorize", as: ana, headers: formHeaders, body: strings.NewReader(form)})
+	w := e.do(req{method: "POST", url: "https://eze.test/_eze/cli/authorize", as: ana, headers: formHeaders, body: strings.NewReader(form)})
 	if w.Code != 200 {
 		t.Fatalf("authorize = %d %s", w.Code, w.Body)
 	}
@@ -557,14 +557,14 @@ func TestCLIAuthorize(t *testing.T) {
 		t.Fatal("token missing from hand-off")
 	}
 	token := m[1]
-	w = e.do(req{url: "https://eze.test/_q/api/me", headers: map[string]string{"Authorization": "Bearer " + token}, remote: "203.0.113.7:1"})
+	w = e.do(req{url: "https://eze.test/_eze/api/me", headers: map[string]string{"Authorization": "Bearer " + token}, remote: "203.0.113.7:1"})
 	if me := decode[map[string]any](t, w); me["email"] != ana {
 		t.Errorf("minted token me = %v", me)
 	}
 
 	// Another site can't mint tokens by auto-submitting the form.
 	formHeaders["Origin"] = "https://evil.eze.test"
-	w = e.do(req{method: "POST", url: "https://eze.test/_q/cli/authorize", as: ana, headers: formHeaders, body: strings.NewReader(form)})
+	w = e.do(req{method: "POST", url: "https://eze.test/_eze/cli/authorize", as: ana, headers: formHeaders, body: strings.NewReader(form)})
 	if w.Code != 403 {
 		t.Errorf("cross-origin authorize = %d", w.Code)
 	}
@@ -602,7 +602,7 @@ func TestSubscribe(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, _, err := websocket.Dial(ctx, "ws://blog.eze.test/_q/subscribe/posts", &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, "ws://blog.eze.test/_eze/subscribe/posts", &websocket.DialOptions{
 		HTTPClient: client,
 		HTTPHeader: http.Header{"X-Email": {ana}},
 	})
@@ -613,7 +613,7 @@ func TestSubscribe(t *testing.T) {
 	waitSubscribers(t, e.srv.hub, "blog", "posts", 1)
 
 	send := func(method, path string, body any) {
-		r, _ := http.NewRequest(method, "http://blog.eze.test/_q/db/posts"+path, jsonBody(body))
+		r, _ := http.NewRequest(method, "http://blog.eze.test/_eze/db/posts"+path, jsonBody(body))
 		r.Header.Set("X-Email", bo)
 		res, err := client.Do(r)
 		if err != nil {
@@ -638,7 +638,7 @@ func TestSubscribe(t *testing.T) {
 	}
 
 	// Writes to another site or collection must not leak into this subscription.
-	r, _ := http.NewRequest("POST", "http://other.eze.test/_q/db/posts", jsonBody(map[string]any{"x": 1}))
+	r, _ := http.NewRequest("POST", "http://other.eze.test/_eze/db/posts", jsonBody(map[string]any{"x": 1}))
 	r.Header.Set("X-Email", bo)
 	if res, err := client.Do(r); err == nil {
 		res.Body.Close()
@@ -667,7 +667,7 @@ func TestSubscribeRejectsCrossOrigin(t *testing.T) {
 	defer ts.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, res, err := websocket.Dial(ctx, "ws://blog.eze.test/_q/subscribe/posts", &websocket.DialOptions{
+	_, res, err := websocket.Dial(ctx, "ws://blog.eze.test/_eze/subscribe/posts", &websocket.DialOptions{
 		HTTPClient: dialer(ts),
 		HTTPHeader: http.Header{"X-Email": {ana}, "Origin": {"https://evil.eze.test"}},
 	})
@@ -733,7 +733,7 @@ func TestTokenManagement(t *testing.T) {
 	desktop := e.bearer(ana)
 	bos := e.bearer(bo)
 
-	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/tokens", headers: laptop}))
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_eze/api/tokens", headers: laptop}))
 	if len(list) != 2 {
 		t.Fatalf("list = %v", list)
 	}
@@ -750,32 +750,32 @@ func TestTokenManagement(t *testing.T) {
 	}
 
 	// Revoke by id: only your own.
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/" + other, headers: bos}); w.Code != 404 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/api/tokens/" + other, headers: bos}); w.Code != 404 {
 		t.Errorf("revoking someone else's token by id = %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/" + other, headers: laptop}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/api/tokens/" + other, headers: laptop}); w.Code != 204 {
 		t.Errorf("revoke = %d %s", w.Code, w.Body)
 	}
-	if w := e.do(req{url: "https://eze.test/_q/api/me", headers: desktop}); w.Code != 401 {
+	if w := e.do(req{url: "https://eze.test/_eze/api/me", headers: desktop}); w.Code != 401 {
 		t.Errorf("revoked token still works: %d", w.Code)
 	}
 
 	// Logout revokes the token making the request.
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/tokens/current", headers: laptop}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/api/tokens/current", headers: laptop}); w.Code != 204 {
 		t.Errorf("logout = %d", w.Code)
 	}
-	if w := e.do(req{url: "https://eze.test/_q/api/me", headers: laptop}); w.Code != 401 {
+	if w := e.do(req{url: "https://eze.test/_eze/api/me", headers: laptop}); w.Code != 401 {
 		t.Errorf("token works after logout: %d", w.Code)
 	}
 
 	// Offboarding: anyone can revoke all of someone's tokens.
 	e.bearer(ana)
-	w := e.do(req{method: "DELETE", url: "https://eze.test/_q/api/users/ANA@example.com/tokens", headers: bos})
+	w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/api/users/ANA@example.com/tokens", headers: bos})
 	if res := decode[map[string]any](t, w); res["revoked"] != 1.0 {
 		t.Errorf("offboard = %v", res)
 	}
-	// Token routes are /_q/api/: proxy headers don't count there.
-	if w := e.do(req{url: "https://eze.test/_q/api/tokens", as: ana}); w.Code != 401 {
+	// Token routes are /_eze/api/: proxy headers don't count there.
+	if w := e.do(req{url: "https://eze.test/_eze/api/tokens", as: ana}); w.Code != 401 {
 		t.Errorf("token list with a proxy header = %d", w.Code)
 	}
 }
@@ -783,10 +783,10 @@ func TestTokenManagement(t *testing.T) {
 func TestCLITokensExpire(t *testing.T) {
 	e := newEnv(t, func(c *config.Config) { c.TokenTTL = 30 * 24 * time.Hour })
 	form := url.Values{"port": {"50123"}, "state": {"abcdefghijklmnopqrstuvwxyz"}}.Encode()
-	w := e.do(req{method: "POST", url: "https://eze.test/_q/cli/authorize", as: ana, body: strings.NewReader(form),
+	w := e.do(req{method: "POST", url: "https://eze.test/_eze/cli/authorize", as: ana, body: strings.NewReader(form),
 		headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"}})
 	token := regexp.MustCompile(`name="token" value="(eze_[A-Za-z0-9_-]+)"`).FindStringSubmatch(w.Body.String())[1]
-	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_q/api/tokens", headers: map[string]string{"Authorization": "Bearer " + token}}))
+	list := decode[[]map[string]any](t, e.do(req{url: "https://eze.test/_eze/api/tokens", headers: map[string]string{"Authorization": "Bearer " + token}}))
 	expires, _ := time.Parse(time.RFC3339Nano, list[0]["expires_at"].(string))
 	if d := time.Until(expires); d < 29*24*time.Hour || d > 31*24*time.Hour {
 		t.Errorf("CLI token expires in %v, want about 30 days", d)
@@ -797,12 +797,12 @@ func TestGetSiteAPI(t *testing.T) {
 	e := newEnv(t)
 	e.deploy("blog", ana, map[string]string{"index.html": "1"})
 	e.deploy("blog", bo, map[string]string{"index.html": "2", "a.js": "x"})
-	got := decode[map[string]any](t, e.do(req{url: "https://eze.test/_q/api/sites/blog", headers: e.bearer(ana)}))
+	got := decode[map[string]any](t, e.do(req{url: "https://eze.test/_eze/api/sites/blog", headers: e.bearer(ana)}))
 	deploys, _ := got["deploys"].([]any)
 	if got["name"] != "blog" || got["url"] != "https://blog.eze.test/" || got["deployed_by"] != bo || len(deploys) != 2 {
 		t.Errorf("site = %v", got)
 	}
-	if w := e.do(req{url: "https://eze.test/_q/api/sites/nope", headers: e.bearer(ana)}); w.Code != 404 {
+	if w := e.do(req{url: "https://eze.test/_eze/api/sites/nope", headers: e.bearer(ana)}); w.Code != 404 {
 		t.Errorf("missing site = %d", w.Code)
 	}
 }

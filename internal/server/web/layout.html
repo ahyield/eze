@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
-<link rel="stylesheet" href="/_q/app.css">
+<link rel="stylesheet" href="/_eze/app.css">
 </head>
 <body>
 <main>
@@ -12,14 +12,14 @@
   <a class="brand" href="/">eze</a>
   <div class="who">
     <span>{{.User.Email}}</span>
-    {{if .OIDC}}<form method="post" action="/_q/auth/logout"><button class="linkish">Sign out</button></form>{{end}}
+    {{if .OIDC}}<form method="post" action="/_eze/auth/logout"><button class="linkish">Sign out</button></form>{{end}}
   </div>
 </header>
 {{end}}
 
 {{define "foot"}}
 </main>
-<script src="/_q/app.js"></script>
+<script src="/_eze/app.js"></script>
 </body>
 </html>
 {{end}}

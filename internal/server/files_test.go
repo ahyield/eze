@@ -37,7 +37,7 @@ func multipartBody(t *testing.T, field, filename, contentType string, content []
 func (e *env) upload(site, as, filename, contentType string, content []byte) *httptest.ResponseRecorder {
 	e.t.Helper()
 	body, ct := multipartBody(e.t, "file", filename, contentType, content)
-	return e.do(req{method: "POST", url: "https://" + site + ".eze.test/_q/files", as: as, body: body, headers: map[string]string{"Content-Type": ct}})
+	return e.do(req{method: "POST", url: "https://" + site + ".eze.test/_eze/files", as: as, body: body, headers: map[string]string{"Content-Type": ct}})
 }
 
 func TestFileUploadAndServe(t *testing.T) { testFileUploadAndServe(t, newEnv(t)) }
@@ -58,7 +58,7 @@ func testFileUploadAndServe(t *testing.T, e *env) {
 	if f["name"] != "cat photo.png" || f["content_type"] != "image/png" || f["size"] != float64(len(png)) || f["_created_by"] != ana {
 		t.Errorf("upload response = %v", f)
 	}
-	if f["url"] != "/_q/files/"+id+"/cat%20photo.png" {
+	if f["url"] != "/_eze/files/"+id+"/cat%20photo.png" {
 		t.Errorf("url = %v", f["url"])
 	}
 
@@ -72,7 +72,7 @@ func testFileUploadAndServe(t *testing.T, e *env) {
 		t.Errorf("headers = %v", h)
 	}
 	// The name segment is cosmetic.
-	if w := e.do(req{url: "https://blog.eze.test/_q/files/" + id + "/whatever.txt", as: bo}); w.Code != 200 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/files/" + id + "/whatever.txt", as: bo}); w.Code != 200 {
 		t.Errorf("other name = %d", w.Code)
 	}
 	// Range requests work, for video seeking.
@@ -81,23 +81,23 @@ func testFileUploadAndServe(t *testing.T, e *env) {
 		t.Errorf("range = %d %q", w.Code, w.Body)
 	}
 
-	if got := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/files/" + id, as: bo})); got["id"] != id || got["url"] != f["url"] {
+	if got := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/files/" + id, as: bo})); got["id"] != id || got["url"] != f["url"] {
 		t.Errorf("metadata = %v", got)
 	}
-	if list := decode[[]map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/files", as: bo})); len(list) != 1 || list[0]["id"] != id {
+	if list := decode[[]map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/files", as: bo})); len(list) != 1 || list[0]["id"] != id {
 		t.Errorf("list = %v", list)
 	}
-	if w := e.do(req{url: "https://other.eze.test/_q/files/" + id, as: ana}); w.Code != 404 {
+	if w := e.do(req{url: "https://other.eze.test/_eze/files/" + id, as: ana}); w.Code != 404 {
 		t.Errorf("file visible from another site: %d", w.Code)
 	}
 
-	if w := e.do(req{method: "DELETE", url: "https://blog.eze.test/_q/files/" + id, as: bo}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://blog.eze.test/_eze/files/" + id, as: bo}); w.Code != 204 {
 		t.Fatalf("delete = %d", w.Code)
 	}
 	if w := e.do(req{url: "https://blog.eze.test" + f["url"].(string), as: bo}); w.Code != 404 {
 		t.Errorf("deleted content = %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://blog.eze.test/_q/files/" + id, as: bo}); w.Code != 404 {
+	if w := e.do(req{method: "DELETE", url: "https://blog.eze.test/_eze/files/" + id, as: bo}); w.Code != 404 {
 		t.Errorf("delete twice = %d", w.Code)
 	}
 	if _, err := os.Stat(filepath.Join(e.cfg.DataDir, "uploads", "blog", id)); !os.IsNotExist(err) {
@@ -159,7 +159,7 @@ func TestUploadLimits(t *testing.T) {
 
 func TestUploadBadRequests(t *testing.T) {
 	e := newEnv(t)
-	url := "https://blog.eze.test/_q/files"
+	url := "https://blog.eze.test/_eze/files"
 	if w := e.do(req{method: "POST", url: url, as: ana, body: strings.NewReader("raw"), headers: map[string]string{"Content-Type": "text/plain"}}); w.Code != 400 {
 		t.Errorf("not multipart = %d", w.Code)
 	}
@@ -173,7 +173,7 @@ func TestUploadBadRequests(t *testing.T) {
 	if w := e.do(req{method: "POST", url: url, as: ana, body: bytes.NewReader(truncated), headers: map[string]string{"Content-Type": ct}}); w.Code != 400 {
 		t.Errorf("truncated = %d %s", w.Code, w.Body)
 	}
-	for _, path := range []string{"/_q/files/a.b", "/_q/files/a.b/x.png"} {
+	for _, path := range []string{"/_eze/files/a.b", "/_eze/files/a.b/x.png"} {
 		if w := e.do(req{url: "https://blog.eze.test" + path, as: ana}); w.Code != 400 {
 			t.Errorf("GET %s = %d", path, w.Code)
 		}
@@ -196,7 +196,7 @@ func TestUploadsSurviveRedeployAndDieWithSite(t *testing.T) {
 	if w := e.do(req{url: "https://blog.eze.test" + f["url"].(string), as: ana}); w.Body.String() != "hello" {
 		t.Errorf("upload lost on redeploy: %d", w.Code)
 	}
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: ana}); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
 	if w := e.do(req{url: "https://blog.eze.test" + f["url"].(string), as: ana}); w.Code != 404 {
@@ -215,10 +215,10 @@ func TestFileContentNotRateLimited(t *testing.T) {
 			t.Fatalf("content request %d = %d", i, w.Code)
 		}
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/files", as: ana}); w.Code != 200 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/files", as: ana}); w.Code != 200 {
 		t.Errorf("second API call = %d", w.Code)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/files", as: ana}); w.Code != 429 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/files", as: ana}); w.Code != 429 {
 		t.Errorf("third API call = %d, want 429", w.Code)
 	}
 }

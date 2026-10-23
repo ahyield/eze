@@ -232,9 +232,9 @@ func TestTokensAndLogout(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.EscapedPath())
 		switch {
-		case r.Method == "GET" && r.URL.Path == "/_q/api/tokens":
+		case r.Method == "GET" && r.URL.Path == "/_eze/api/tokens":
 			w.Write([]byte(`[{"id":"abc123def456","label":"cli","created_at":"2026-10-01T00:00:00Z","expires_at":"2026-12-30T00:00:00Z","current":true}]`))
-		case r.Method == "DELETE" && r.URL.Path == "/_q/api/users/bo@example.com/tokens":
+		case r.Method == "DELETE" && r.URL.Path == "/_eze/api/users/bo@example.com/tokens":
 			w.Write([]byte(`{"revoked":2}`))
 		case r.Method == "DELETE":
 			w.WriteHeader(204)
@@ -273,7 +273,7 @@ func TestTokensAndLogout(t *testing.T) {
 	if _, err := os.Stat(p); !os.IsNotExist(err) {
 		t.Error("logout kept the saved token")
 	}
-	want := []string{"GET /_q/api/tokens", "DELETE /_q/api/tokens/abc123def456", "DELETE /_q/api/users/bo@example.com/tokens", "DELETE /_q/api/tokens/current"}
+	want := []string{"GET /_eze/api/tokens", "DELETE /_eze/api/tokens/abc123def456", "DELETE /_eze/api/users/bo@example.com/tokens", "DELETE /_eze/api/tokens/current"}
 	if strings.Join(calls, ",") != strings.Join(want, ",") {
 		t.Errorf("calls = %v", calls)
 	}

@@ -64,7 +64,7 @@ func newMCPServer(connect func() (*client, error)) *mcp.Server {
 			return nil, whoamiOut{}, err
 		}
 		var me user
-		if err := c.do("GET", "/_q/api/me", nil, "", &me); err != nil {
+		if err := c.do("GET", "/_eze/api/me", nil, "", &me); err != nil {
 			return nil, whoamiOut{}, err
 		}
 		return nil, whoamiOut{Email: me.Email, Name: me.Name, Server: c.cfg.Server}, nil
@@ -80,7 +80,7 @@ func newMCPServer(connect func() (*client, error)) *mcp.Server {
 			return nil, listSitesOut{}, err
 		}
 		var sites []site
-		if err := c.do("GET", "/_q/api/sites", nil, "", &sites); err != nil {
+		if err := c.do("GET", "/_eze/api/sites", nil, "", &sites); err != nil {
 			return nil, listSitesOut{}, err
 		}
 		return nil, listSitesOut{Sites: sites}, nil
@@ -96,7 +96,7 @@ func newMCPServer(connect func() (*client, error)) *mcp.Server {
 			return nil, siteDetail{}, err
 		}
 		var out siteDetail
-		err = c.do("GET", "/_q/api/sites/"+url.PathEscape(in.Site), nil, "", &out)
+		err = c.do("GET", "/_eze/api/sites/"+url.PathEscape(in.Site), nil, "", &out)
 		return nil, out, err
 	})
 
@@ -140,7 +140,7 @@ func newMCPServer(connect func() (*client, error)) *mcp.Server {
 			return nil, deployOut{}, err
 		}
 		var res site
-		if err := c.do("PUT", "/_q/api/sites/"+url.PathEscape(in.Site), &buf, "application/gzip", &res); err != nil {
+		if err := c.do("PUT", "/_eze/api/sites/"+url.PathEscape(in.Site), &buf, "application/gzip", &res); err != nil {
 			return nil, deployOut{}, err
 		}
 		return nil, deployOut{Site: res.Name, URL: res.URL, Files: len(in.Files), Warning: warning}, nil
@@ -173,7 +173,7 @@ func newMCPServer(connect func() (*client, error)) *mcp.Server {
 		}
 		siteClient := &client{cfg: &Config{Server: base, Token: c.cfg.Token}, http: c.http}
 		var docs []map[string]any
-		if err := siteClient.do("GET", "/_q/db/"+url.PathEscape(in.Collection)+"?"+q.Encode(), nil, "", &docs); err != nil {
+		if err := siteClient.do("GET", "/_eze/db/"+url.PathEscape(in.Collection)+"?"+q.Encode(), nil, "", &docs); err != nil {
 			return nil, queryOut{}, err
 		}
 		return nil, queryOut{Documents: docs}, nil

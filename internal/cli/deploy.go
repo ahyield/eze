@@ -142,7 +142,7 @@ func deployDir(c *client, dir, siteName string, starting func(files int, size in
 	if starting != nil {
 		starting(files, int64(buf.Len()), name)
 	}
-	if err := c.do("PUT", "/_q/api/sites/"+url.PathEscape(name), &buf, "application/gzip", &res.Site); err != nil {
+	if err := c.do("PUT", "/_eze/api/sites/"+url.PathEscape(name), &buf, "application/gzip", &res.Site); err != nil {
 		return nil, err
 	}
 	if proj == nil || proj.Site != name {

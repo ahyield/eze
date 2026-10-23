@@ -83,7 +83,7 @@ func Login(args []string) error {
 	go srv.Serve(ln)
 	defer srv.Close()
 
-	authURL := server + "/_q/cli/authorize?" + url.Values{"port": {strconv.Itoa(port)}, "state": {state}}.Encode()
+	authURL := server + "/_eze/cli/authorize?" + url.Values{"port": {strconv.Itoa(port)}, "state": {state}}.Encode()
 	fmt.Println("Opening your browser to sign in. If it doesn't open, visit:")
 	fmt.Println("  " + authURL)
 	openBrowser(authURL)
@@ -98,7 +98,7 @@ func Login(args []string) error {
 	cfg := &Config{Server: server, Token: token}
 	c := &client{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second}}
 	var me user
-	if err := c.do("GET", "/_q/api/me", nil, "", &me); err != nil {
+	if err := c.do("GET", "/_eze/api/me", nil, "", &me); err != nil {
 		return fmt.Errorf("verifying new token: %w", err)
 	}
 	path, err := saveConfig(cfg)
@@ -128,7 +128,7 @@ func Whoami(args []string) error {
 		return err
 	}
 	var me user
-	if err := c.do("GET", "/_q/api/me", nil, "", &me); err != nil {
+	if err := c.do("GET", "/_eze/api/me", nil, "", &me); err != nil {
 		return err
 	}
 	fmt.Printf("%s (%s) on %s\n", me.Email, me.Name, c.cfg.Server)
@@ -141,7 +141,7 @@ func List(args []string) error {
 		return err
 	}
 	var list []site
-	if err := c.do("GET", "/_q/api/sites", nil, "", &list); err != nil {
+	if err := c.do("GET", "/_eze/api/sites", nil, "", &list); err != nil {
 		return err
 	}
 	if len(list) == 0 {
@@ -178,7 +178,7 @@ func Remove(args []string) error {
 			return errors.New("aborted")
 		}
 	}
-	if err := c.do("DELETE", "/_q/api/sites/"+url.PathEscape(name), nil, "", nil); err != nil {
+	if err := c.do("DELETE", "/_eze/api/sites/"+url.PathEscape(name), nil, "", nil); err != nil {
 		return err
 	}
 	fmt.Println("Deleted", name)
@@ -203,7 +203,7 @@ func Tokens(args []string) error {
 	}
 	if len(args) == 0 || args[0] == "ls" {
 		var tokens []tokenInfo
-		if err := c.do("GET", "/_q/api/tokens", nil, "", &tokens); err != nil {
+		if err := c.do("GET", "/_eze/api/tokens", nil, "", &tokens); err != nil {
 			return err
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -235,12 +235,12 @@ func Tokens(args []string) error {
 		var res struct {
 			Revoked int `json:"revoked"`
 		}
-		if err := c.do("DELETE", "/_q/api/users/"+url.PathEscape(*userFlag)+"/tokens", nil, "", &res); err != nil {
+		if err := c.do("DELETE", "/_eze/api/users/"+url.PathEscape(*userFlag)+"/tokens", nil, "", &res); err != nil {
 			return err
 		}
 		fmt.Printf("Revoked %d token(s) of %s\n", res.Revoked, *userFlag)
 	case *userFlag == "" && len(pos) == 1:
-		if err := c.do("DELETE", "/_q/api/tokens/"+url.PathEscape(pos[0]), nil, "", nil); err != nil {
+		if err := c.do("DELETE", "/_eze/api/tokens/"+url.PathEscape(pos[0]), nil, "", nil); err != nil {
 			return err
 		}
 		fmt.Println("Revoked", pos[0])
@@ -256,7 +256,7 @@ func Logout(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.do("DELETE", "/_q/api/tokens/current", nil, "", nil); err != nil {
+	if err := c.do("DELETE", "/_eze/api/tokens/current", nil, "", nil); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: could not revoke the token on the server:", err)
 	}
 	p, err := configPath()

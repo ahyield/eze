@@ -110,7 +110,7 @@ func (c *client) do(method, path string, body io.Reader, contentType string, out
 			return fmt.Errorf("%s (HTTP %d)", apiErr.Error, res.StatusCode)
 		}
 		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusFound {
-			return fmt.Errorf("not authorized (HTTP %d): run `eze login` again, or check that your auth proxy lets Bearer requests to /_q/api/ through", res.StatusCode)
+			return fmt.Errorf("not authorized (HTTP %d): run `eze login` again, or check that your auth proxy lets Bearer requests to /_eze/api/ through", res.StatusCode)
 		}
 		return fmt.Errorf("HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(data)))
 	}

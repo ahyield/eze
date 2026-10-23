@@ -144,7 +144,7 @@
   function upload(name, body, contentType, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('PUT', '/_q/sites/' + encodeURIComponent(name));
+      xhr.open('PUT', '/_eze/sites/' + encodeURIComponent(name));
       xhr.setRequestHeader('Content-Type', contentType);
       xhr.responseType = 'json';
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
@@ -341,7 +341,7 @@
       button.disabled = true;
       error.hidden = true;
       try {
-        const res = await fetch('/_q/sites/' + encodeURIComponent(name), { method: 'DELETE', credentials: 'same-origin' });
+        const res = await fetch('/_eze/sites/' + encodeURIComponent(name), { method: 'DELETE', credentials: 'same-origin' });
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           throw new Error((data && data.error) || 'Delete failed (' + res.status + ')');

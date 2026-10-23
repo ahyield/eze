@@ -193,7 +193,7 @@ func TestMCPTools(t *testing.T) {
 
 	// Read back data the site stored.
 	for _, status := range []string{"draft", "live", "draft"} {
-		req, _ := http.NewRequest("POST", "http://demo.eze.test/_q/db/posts", strings.NewReader(`{"status":"`+status+`"}`))
+		req, _ := http.NewRequest("POST", "http://demo.eze.test/_eze/db/posts", strings.NewReader(`{"status":"`+status+`"}`))
 		req.Header.Set("Authorization", "Bearer "+e.token)
 		req.Header.Set("Content-Type", "application/json")
 		res, err := e.http.Do(req)

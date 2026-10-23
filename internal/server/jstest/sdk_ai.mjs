@@ -16,7 +16,7 @@ let sent;
 respond = (url, init) => { sent = { url, body: JSON.parse(init.body) }; return new Response(stream(full, cuts), { status: 200 }); };
 const chunks = [];
 const res = await eze.ai.chat('hi', { onText: (c, all) => chunks.push([c, all]), effort: 'low' });
-console.assert(sent.url === '/_q/ai/chat' && sent.body.stream === true && sent.body.messages[0].content === 'hi' && sent.body.effort === 'low', 'request', sent);
+console.assert(sent.url === '/_eze/ai/chat' && sent.body.stream === true && sent.body.messages[0].content === 'hi' && sent.body.effort === 'low', 'request', sent);
 console.assert(JSON.stringify(chunks) === JSON.stringify([['Hé', 'Hé'], ['llo', 'Héllo']]), 'chunks', chunks);
 console.assert(res.text === 'Héllo' && res.usage.output_tokens === 2, 'result', res);
 // Error event mid-stream rejects with EzeError carrying the status.

@@ -198,7 +198,7 @@ func (s *Server) handleCLIAuthorize(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// API tokens. Listing and revoking need a token (these are /_q/api/ routes), so they work
+// API tokens. Listing and revoking need a token (these are /_eze/api/ routes), so they work
 // from the CLI. Anyone may revoke anyone's tokens: offboarding someone shouldn't wait for an
 // admin, and under eze's trust model the worst case is making a colleague run eze login.
 

@@ -241,7 +241,7 @@ func dialRoom(t *testing.T, e *env, client *http.Client, site, room, as string) 
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, _, err := websocket.Dial(ctx, "ws://"+site+".eze.test/_q/ws/"+room, &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, "ws://"+site+".eze.test/_eze/ws/"+room, &websocket.DialOptions{
 		HTTPClient: client,
 		HTTPHeader: http.Header{"X-Email": {as}},
 	})
@@ -331,7 +331,7 @@ func TestRoomWebsocketRejects(t *testing.T) {
 
 	watcher := dialRoom(t, e, client, "blog", "lobby", bo)
 	read(t, watcher) // welcome
-	_, res, err := websocket.Dial(ctx, "ws://blog.eze.test/_q/ws/lobby", &websocket.DialOptions{
+	_, res, err := websocket.Dial(ctx, "ws://blog.eze.test/_eze/ws/lobby", &websocket.DialOptions{
 		HTTPClient: client,
 		HTTPHeader: http.Header{"X-Email": {ana}, "Origin": {"https://evil.eze.test"}},
 	})
@@ -346,15 +346,15 @@ func TestRoomWebsocketRejects(t *testing.T) {
 	}
 	watcher.Close(websocket.StatusNormalClosure, "")
 	waitPeers(t, e, 0)
-	_, res, err = websocket.Dial(ctx, "ws://blog.eze.test/_q/ws/lobby", &websocket.DialOptions{HTTPClient: client})
+	_, res, err = websocket.Dial(ctx, "ws://blog.eze.test/_eze/ws/lobby", &websocket.DialOptions{HTTPClient: client})
 	if err == nil || (res != nil && res.StatusCode != http.StatusUnauthorized) {
 		t.Errorf("anonymous join: err=%v", err)
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/ws/bad.room", as: ana}); w.Code != 400 {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/ws/bad.room", as: ana}); w.Code != 400 {
 		t.Errorf("bad room name = %d", w.Code)
 	}
 	// A failed upgrade must not leave a ghost peer behind.
-	if w := e.do(req{url: "https://blog.eze.test/_q/ws/lobby", as: ana}); w.Code == http.StatusSwitchingProtocols {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/ws/lobby", as: ana}); w.Code == http.StatusSwitchingProtocols {
 		t.Fatal("plain GET upgraded")
 	}
 	waitPeers(t, e, 0)
@@ -379,7 +379,7 @@ func TestRoomsDroppedWithSite(t *testing.T) {
 	e.deploy("blog", ana, map[string]string{"index.html": "x"})
 	a := dialRoom(t, e, client, "blog", "lobby", ana)
 	read(t, a)
-	if w := e.do(req{method: "DELETE", url: "https://eze.test/_q/sites/blog", as: ana}); w.Code != 204 {
+	if w := e.do(req{method: "DELETE", url: "https://eze.test/_eze/sites/blog", as: ana}); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -96,7 +96,7 @@ func aiEnv(t *testing.T, reply func(http.ResponseWriter, *http.Request), mutate 
 }
 
 func chat(e *env, body any) *httptest.ResponseRecorder {
-	return e.do(req{method: "POST", url: "https://blog.eze.test/_q/ai/chat", as: ana, body: jsonBody(body)})
+	return e.do(req{method: "POST", url: "https://blog.eze.test/_eze/ai/chat", as: ana, body: jsonBody(body)})
 }
 
 var hello = map[string]any{"messages": []map[string]string{{"role": "user", "content": "hi"}}}
@@ -106,7 +106,7 @@ func TestAIDisabled(t *testing.T) {
 	if w := chat(e, hello); w.Code != 503 || !strings.Contains(w.Body.String(), "EZE_ANTHROPIC_API_KEY") {
 		t.Errorf("chat = %d %s", w.Code, w.Body)
 	}
-	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/ai/usage", as: ana}))
+	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/ai/usage", as: ana}))
 	if u["enabled"] != false {
 		t.Errorf("usage = %v", u)
 	}
@@ -150,7 +150,7 @@ func TestAIChat(t *testing.T) {
 		t.Errorf("fallbacks = %v, beta = %q", body["fallbacks"], headers.Get("Anthropic-Beta"))
 	}
 
-	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/ai/usage", as: ana}))
+	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/ai/usage", as: ana}))
 	if u["enabled"] != true || u["used"] != 15.0 || u["default_model"] != "claude-opus-5-5" {
 		t.Errorf("usage = %v", u)
 	}
@@ -302,13 +302,13 @@ func TestAIBudget(t *testing.T) {
 		t.Errorf("provider called %d times, want 1", calls)
 	}
 	// Budgets are per user and span sites.
-	if w := e.do(req{method: "POST", url: "https://game.eze.test/_q/ai/chat", as: ana, body: jsonBody(hello)}); w.Code != 429 {
+	if w := e.do(req{method: "POST", url: "https://game.eze.test/_eze/ai/chat", as: ana, body: jsonBody(hello)}); w.Code != 429 {
 		t.Errorf("same user, other site = %d", w.Code)
 	}
-	if w := e.do(req{method: "POST", url: "https://blog.eze.test/_q/ai/chat", as: bo, body: jsonBody(hello)}); w.Code != 200 {
+	if w := e.do(req{method: "POST", url: "https://blog.eze.test/_eze/ai/chat", as: bo, body: jsonBody(hello)}); w.Code != 200 {
 		t.Errorf("other user = %d", w.Code)
 	}
-	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/ai/usage", as: ana}))
+	u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/ai/usage", as: ana}))
 	if u["used"] != 120.0 || u["limit"] != 100.0 {
 		t.Errorf("usage = %v", u)
 	}
@@ -316,7 +316,7 @@ func TestAIBudget(t *testing.T) {
 
 func TestAICrossOriginBlocked(t *testing.T) {
 	e, fake := aiEnv(t, streamReply("claude-opus-5-5", []string{"x"}, "end_turn", 1, 1))
-	w := e.do(req{method: "POST", url: "https://blog.eze.test/_q/ai/chat", as: ana, body: jsonBody(hello),
+	w := e.do(req{method: "POST", url: "https://blog.eze.test/_eze/ai/chat", as: ana, body: jsonBody(hello),
 		headers: map[string]string{"Origin": "https://evil.eze.test"}})
 	if w.Code != 403 {
 		t.Errorf("cross-origin chat = %d", w.Code)
@@ -341,7 +341,7 @@ func TestAIClientDisconnectCancelsUpstream(t *testing.T) {
 	})
 	client := dialer(serve(t, e))
 	ctx, cancel := context.WithCancel(context.Background())
-	r, _ := http.NewRequestWithContext(ctx, "POST", "http://blog.eze.test/_q/ai/chat", jsonBody(map[string]any{"stream": true, "messages": hello["messages"]}))
+	r, _ := http.NewRequestWithContext(ctx, "POST", "http://blog.eze.test/_eze/ai/chat", jsonBody(map[string]any{"stream": true, "messages": hello["messages"]}))
 	r.Header.Set("X-Email", ana)
 	res, err := client.Do(r)
 	if err != nil {
@@ -533,7 +533,7 @@ func TestAIThroughOpenAICompatibleProvider(t *testing.T) {
 	if n, _ := e.store.AITokensUsed(context.Background(), ana, time.Now()); n != 25 {
 		t.Errorf("recorded = %d, want the reported 25", n)
 	}
-	if u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_q/ai/usage", as: ana})); u["provider"] != "openai" {
+	if u := decode[map[string]any](t, e.do(req{url: "https://blog.eze.test/_eze/ai/usage", as: ana})); u["provider"] != "openai" {
 		t.Errorf("usage = %v", u)
 	}
 	if w := chat(e, map[string]any{"model": "claude-opus-5-5", "messages": hello["messages"]}); w.Code != 400 {

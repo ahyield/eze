@@ -49,7 +49,7 @@ func TestIndexPage(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("index = %d", code)
 	}
-	mustContain(t, body, "data-drop", "Drop a folder to deploy it", "Nothing here yet", `href="/_q/app.css"`, `src="/_q/app.js"`, ana)
+	mustContain(t, body, "data-drop", "Drop a folder to deploy it", "Nothing here yet", `href="/_eze/app.css"`, `src="/_eze/app.js"`, ana)
 	if strings.Contains(body, "AI today") {
 		t.Error("AI usage shown while AI is off")
 	}
@@ -102,7 +102,7 @@ func TestSitePage(t *testing.T) {
 		"<h1>blog</h1>", `href="https://blog.eze.test/"`, "Open site",
 		"Drop a new version of blog", `data-site="blog"`, // redeploy
 		"Deploy history",
-		"photo.png", "https://blog.eze.test/_q/files/", // uploads link to the site's origin
+		"photo.png", "https://blog.eze.test/_eze/files/", // uploads link to the site's origin
 		"AI usage, last 30 days", "5,120 tokens", "5,000",
 		`data-delete-site="blog"`, "Type blog to confirm",
 	)
@@ -155,7 +155,7 @@ func TestSitePageMissingAndInvalid(t *testing.T) {
 
 func TestDashboardAssets(t *testing.T) {
 	e := newEnv(t)
-	for url, ct := range map[string]string{"https://eze.test/_q/app.js": "javascript", "https://eze.test/_q/app.css": "text/css"} {
+	for url, ct := range map[string]string{"https://eze.test/_eze/app.js": "javascript", "https://eze.test/_eze/app.css": "text/css"} {
 		w := e.do(req{url: url, as: ana})
 		if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Type"), ct) || w.Body.Len() < 1000 {
 			t.Errorf("%s = %d %q (%d bytes)", url, w.Code, w.Header().Get("Content-Type"), w.Body.Len())
@@ -169,7 +169,7 @@ func TestDeployZipThroughAPI(t *testing.T) {
 		testutil.Entry{Name: "Site/index.html", Body: "from a zip"},
 		testutil.Entry{Name: "__MACOSX/Site/._index.html", Body: "fork"},
 	)
-	w := e.do(req{method: "PUT", url: "https://eze.test/_q/sites/blog", as: ana, body: bytes.NewReader(zip),
+	w := e.do(req{method: "PUT", url: "https://eze.test/_eze/sites/blog", as: ana, body: bytes.NewReader(zip),
 		headers: map[string]string{"Content-Type": "application/zip", "Origin": "https://eze.test", "Sec-Fetch-Site": "same-origin"}})
 	if w.Code != 200 {
 		t.Fatalf("zip deploy = %d %s", w.Code, w.Body)
@@ -215,13 +215,13 @@ func TestTemplateHelpers(t *testing.T) {
 func TestDashboardCannotBeFramed(t *testing.T) {
 	e := newEnv(t)
 	e.deploy("blog", ana, map[string]string{"index.html": "x"})
-	for _, url := range []string{"https://eze.test/", "https://eze.test/sites/blog", "https://eze.test/_q/cli/authorize?port=50123&state=abcdefghijklmnopqrstuvwxyz"} {
+	for _, url := range []string{"https://eze.test/", "https://eze.test/sites/blog", "https://eze.test/_eze/cli/authorize?port=50123&state=abcdefghijklmnopqrstuvwxyz"} {
 		w := e.do(req{url: url, as: ana})
 		if w.Header().Get("Content-Security-Policy") != "frame-ancestors 'none'" || w.Header().Get("X-Frame-Options") != "DENY" {
 			t.Errorf("%s can be framed: %v", url, w.Header())
 		}
 	}
-	if w := e.do(req{url: "https://blog.eze.test/_q/me", as: ana}); w.Header().Get("X-Content-Type-Options") != "nosniff" {
+	if w := e.do(req{url: "https://blog.eze.test/_eze/me", as: ana}); w.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Error("JSON responses lack nosniff")
 	}
 }

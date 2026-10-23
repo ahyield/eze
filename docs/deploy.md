@@ -13,7 +13,7 @@ original `Host` header (Caddy and nginx both do by default) and supports websock
 
 Register an OIDC client with your identity provider:
 
-- Redirect URI: `https://eze.example.com/_q/auth/callback`
+- Redirect URI: `https://eze.example.com/_eze/auth/callback`
 - Scopes: `openid profile email`
 
 Caddyfile (using the [Cloudflare DNS plugin](https://github.com/caddy-dns/cloudflare) for the wildcard cert):
@@ -52,8 +52,8 @@ eze trusts that header **only** when the TCP connection comes from `EZE_TRUSTED_
 Make sure nothing else can reach eze's port directly.
 
 The CLI authenticates with an eze API token (`Authorization: Bearer eze_...`), which your
-proxy does not understand. Let requests to `/_q/api/` through without proxy auth. eze only
-accepts API tokens on `/_q/api/`: identity headers and cookies are ignored there, so a client
+proxy does not understand. Let requests to `/_eze/api/` through without proxy auth. eze only
+accepts API tokens on `/_eze/api/`: identity headers and cookies are ignored there, so a client
 can't sign itself in by sending its own `X-Forwarded-Email` on that path. Everything else,
 including the dashboard, must stay behind the proxy.
 
@@ -68,7 +68,7 @@ oauth2-proxy \
   --cookie-domain=.eze.example.com \
   --whitelist-domain=.eze.example.com \
   --email-domain=example.com \
-  --skip-auth-route='^/_q/api/' \
+  --skip-auth-route='^/_eze/api/' \
   --skip-auth-strip-headers=true \
   ...provider flags...
 ```
@@ -86,7 +86,7 @@ EZE_TRUSTED_PROXIES=127.0.0.1/32 eze serve
 ### Cloudflare Access
 
 Set `EZE_AUTH_EMAIL_HEADER=Cf-Access-Authenticated-User-Email`. Add a second Access application
-for the path `eze.example.com/_q/api/` with a Bypass policy so the CLI's token reaches eze.
+for the path `eze.example.com/_eze/api/` with a Bypass policy so the CLI's token reaches eze.
 Restrict `EZE_TRUSTED_PROXIES` to the address `cloudflared` connects from (usually `127.0.0.1/32`).
 
 ### Tailscale Serve
@@ -222,7 +222,7 @@ Without `EZE_STORAGE`, also back up `sites/` (deployed files) and `uploads/` (fi
 through sites) in the same folder. With a bucket, use the bucket's own versioning or backups.
 
 `eze.ai` replies stream as server-sent events. eze sends `X-Accel-Buffering: no` so nginx
-won't buffer them; other proxies may need response buffering turned off for `/_q/ai/`.
+won't buffer them; other proxies may need response buffering turned off for `/_eze/ai/`.
 
 If a reverse proxy limits request bodies (nginx defaults to 1 MB), raise it to at least
 `EZE_MAX_UPLOAD_BYTES` and `EZE_MAX_DEPLOY_BYTES`, e.g. `client_max_body_size 64m;`.
