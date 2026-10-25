@@ -200,7 +200,7 @@ func Load() (*Config, error) {
 			return nil, errors.New("EZE_AUTH=dev is only allowed when EZE_ADDR binds to a loopback address (e.g. 127.0.0.1:8080)")
 		}
 	case "":
-		return nil, errors.New("EZE_AUTH is required: \"header\" (behind an auth proxy) or \"oidc\"; eze never runs without authentication")
+		return nil, errors.New("EZE_AUTH is required: \"header\" (behind an auth proxy), \"oidc\", or \"dev\" (local only, loopback EZE_ADDR); eze never runs without authentication")
 	default:
 		return nil, fmt.Errorf("unknown EZE_AUTH %q", c.AuthMode)
 	}
