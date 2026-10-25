@@ -126,7 +126,7 @@ func (s *Store) SetDoc(ctx context.Context, site, collection, id, by string, dat
 	if err != nil {
 		return nil, false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var exists int
 	err = tx.QueryRowContext(ctx, `SELECT 1 FROM docs WHERE site = ? AND collection = ? AND id = ?`, site, collection, id).Scan(&exists)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {

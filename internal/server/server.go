@@ -114,8 +114,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	host := strings.ToLower(r.Host)
 	var mux *http.ServeMux
-	switch {
-	case host == s.cfg.Domain:
+	switch host {
+	case s.cfg.Domain:
 		if strings.HasPrefix(r.URL.Path, "/_eze/auth/") {
 			s.public.ServeHTTP(w, r)
 			return

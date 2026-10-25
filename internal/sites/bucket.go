@@ -143,7 +143,7 @@ func (bb *bucketBackend) publish(name, staging string) error {
 		g.Go(func() error { return bb.upload(gctx, filepath.Join(staging, filepath.FromSlash(rel)), prefix+rel) })
 	}
 	if err := g.Wait(); err != nil {
-		storage.DeletePrefix(ctx, bb.b, prefix)
+		_ = storage.DeletePrefix(ctx, bb.b, prefix) // the next deploy sweeps up anything left
 		return err
 	}
 

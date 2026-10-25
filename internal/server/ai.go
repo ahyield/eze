@@ -202,7 +202,7 @@ func (s *Server) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// call too: an abandoned tab doesn't keep spending tokens.
 	var res *ai.Result
 	if req.Stream {
-		res, err = s.streamChat(w, r, aiReq)
+		res, _ = s.streamChat(w, r, aiReq) // errors already went to the browser as an error event
 	} else {
 		res, err = s.ai.Stream(r.Context(), aiReq, func(string) error { return nil })
 		if err == nil {

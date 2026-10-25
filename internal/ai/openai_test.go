@@ -29,7 +29,9 @@ func newFakeOpenAI(t *testing.T, reply func(w http.ResponseWriter)) *fakeOpenAI 
 			t.Errorf("unexpected path %s", r.URL.Path)
 		}
 		f.mu.Lock()
-		json.NewDecoder(r.Body).Decode(&f.body)
+		if err := json.NewDecoder(r.Body).Decode(&f.body); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		f.header = r.Header.Clone()
 		f.mu.Unlock()
 		reply(w)

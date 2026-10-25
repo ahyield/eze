@@ -171,9 +171,11 @@ func TestTokenExpiryMigration(t *testing.T) {
 	}
 	// Reopening must not migrate twice.
 	s.Close()
-	if s, err = Open(dir); err != nil {
+	reopened, err := Open(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
+	reopened.Close()
 }
 
 func TestDocCRUD(t *testing.T) {
