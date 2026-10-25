@@ -80,7 +80,7 @@ func Login(args []string) error {
 		default:
 		}
 	})}
-	go srv.Serve(ln)
+	go func() { _ = srv.Serve(ln) }() // returns ErrServerClosed on Close
 	defer srv.Close()
 
 	authURL := server + "/_eze/cli/authorize?" + url.Values{"port": {strconv.Itoa(port)}, "state": {state}}.Encode()

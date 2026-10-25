@@ -7,6 +7,7 @@ linters:
       exclude-functions:
         - (*database/sql.Tx).Rollback
         - (*github.com/coder/websocket.Conn).CloseNow
+        - (net/http.ResponseWriter).Write
   exclusions:
     # Unchecked Close, os.Remove and fmt.Fprint* errors: best-effort cleanup and writes
     # to a client that may already be gone.

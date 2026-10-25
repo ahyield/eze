@@ -92,7 +92,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   time.Now().UTC().Truncate(time.Millisecond),
 	}
 	if err := s.store.CreateFile(r.Context(), site, f); err != nil {
-		s.uploads.Delete(context.WithoutCancel(r.Context()), site, id)
+		_ = s.uploads.Delete(context.WithoutCancel(r.Context()), site, id) // best effort; report the store error
 		s.internalErr(w, r, err)
 		return
 	}

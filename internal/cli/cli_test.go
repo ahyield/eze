@@ -118,7 +118,9 @@ func TestProjectFile(t *testing.T) {
 	if p, err := readProject(dir); err != nil || p.Site != "blog" {
 		t.Fatalf("roundtrip = %v, %v", p, err)
 	}
-	os.WriteFile(filepath.Join(dir, projectFile), []byte("{"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, projectFile), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := readProject(dir); err == nil {
 		t.Error("corrupt eze.json accepted")
 	}
@@ -171,8 +173,12 @@ func TestConfigEnvOverride(t *testing.T) {
 	}
 	// A config left world-readable (e.g. by an older version or a manual edit) gets fixed on save.
 	p, _ := configPath()
-	os.MkdirAll(filepath.Dir(p), 0o755)
-	os.WriteFile(p, []byte("{}"), 0o644)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := saveConfig(&Config{Server: "https://eze.page/", Token: "eze_saved"}); err != nil {
 		t.Fatal(err)
 	}

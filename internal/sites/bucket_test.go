@@ -114,7 +114,9 @@ func TestBucketSurvivesRestart(t *testing.T) {
 	ctx := context.Background()
 	deploy(t, bucketStore(t, b), map[string]string{"index.html": "home", "docs/index.html": "docs"})
 	// A first deploy of another site that never got its manifest.
-	b.WriteAll(ctx, "sites/ghost/20200101T000000Z-dead/index.html", []byte("x"), nil)
+	if err := b.WriteAll(ctx, "sites/ghost/20200101T000000Z-dead/index.html", []byte("x"), nil); err != nil {
+		t.Fatal(err)
+	}
 
 	s := bucketStore(t, b) // as if eze restarted
 	if w := get(s, "blog", "/docs/"); w.Code != 200 || w.Body.String() != "docs" {

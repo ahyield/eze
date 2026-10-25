@@ -276,13 +276,13 @@ func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req ai.Reque
 	if err != nil {
 		var aerr *ai.Error
 		if errors.As(err, &aerr) {
-			send("error", map[string]any{"error": aerr.Message, "status": aerr.Status})
+			_ = send("error", map[string]any{"error": aerr.Message, "status": aerr.Status})
 		} else if !errors.Is(err, context.Canceled) {
 			slog.Error("ai stream", "err", err)
-			send("error", map[string]any{"error": "internal error", "status": http.StatusInternalServerError})
+			_ = send("error", map[string]any{"error": "internal error", "status": http.StatusInternalServerError})
 		}
 		return res, err
 	}
-	send("done", res)
+	_ = send("done", res) // a failed send means the browser left; the result still gets billed
 	return res, nil
 }

@@ -34,7 +34,9 @@ func newFakeAnthropic(t *testing.T, reply func(w http.ResponseWriter, r *http.Re
 	f := &fakeAnthropic{reply: reply}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		f.mu.Lock()
 		f.bodies = append(f.bodies, body)
 		f.headers = append(f.headers, r.Header.Clone())
@@ -204,7 +206,9 @@ func TestAIChatStream(t *testing.T) {
 		}
 	}
 	var done ai.Result
-	json.Unmarshal([]byte(events[3][1]), &done)
+	if err := json.Unmarshal([]byte(events[3][1]), &done); err != nil {
+		t.Fatal(err)
+	}
 	if events[3][0] != "done" || done.Text != "abc" || done.Usage.OutputTokens != 3 {
 		t.Errorf("done = %v", events[3])
 	}

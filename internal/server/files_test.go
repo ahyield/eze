@@ -19,7 +19,9 @@ func multipartBody(t *testing.T, field, filename, contentType string, content []
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
-	mw.WriteField("note", "fields before the file are skipped")
+	if err := mw.WriteField("note", "fields before the file are skipped"); err != nil {
+		t.Fatal(err)
+	}
 	h := textproto.MIMEHeader{}
 	h.Set("Content-Disposition", `form-data; name="`+field+`"; filename="`+filename+`"`)
 	if contentType != "" {
@@ -29,7 +31,9 @@ func multipartBody(t *testing.T, field, filename, contentType string, content []
 	if err != nil {
 		t.Fatal(err)
 	}
-	part.Write(content)
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
 	mw.Close()
 	return &buf, mw.FormDataContentType()
 }
