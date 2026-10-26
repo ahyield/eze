@@ -50,7 +50,9 @@ func TestSaveOpenDelete(t *testing.T) {
 				t.Errorf("read back %d bytes, err %v", len(got), err)
 			}
 			f := s.Open(ctx, "blog", "f1", size)
-			f.Seek(998, io.SeekStart)
+			if _, err := f.Seek(998, io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
 			if tail, _ := io.ReadAll(f); string(tail) != "xx" {
 				t.Errorf("after seek = %q", tail)
 			}
@@ -101,8 +103,11 @@ func TestDeleteSite(t *testing.T) {
 	ctx := context.Background()
 	for name, s := range stores(t) {
 		t.Run(name, func(t *testing.T) {
-			s.Save(ctx, "a", "f1", strings.NewReader("x"), 10)
-			s.Save(ctx, "b", "f1", strings.NewReader("y"), 10)
+			for site, body := range map[string]string{"a": "x", "b": "y"} {
+				if _, _, err := s.Save(ctx, site, "f1", strings.NewReader(body), 10); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if err := s.DeleteSite(ctx, "a"); err != nil {
 				t.Fatal(err)
 			}
@@ -120,8 +125,12 @@ func TestDeleteSite(t *testing.T) {
 // no metadata files beside them. They must keep working, and new files must look the same.
 func TestLocalLayoutUnchanged(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "uploads", "blog"), 0o755)
-	os.WriteFile(filepath.Join(dir, "uploads", "blog", "old"), []byte("from before"), 0o644)
+	if err := os.MkdirAll(filepath.Join(dir, "uploads", "blog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "uploads", "blog", "old"), []byte("from before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s, err := NewStore(dir, nil)
 	if err != nil {
 		t.Fatal(err)

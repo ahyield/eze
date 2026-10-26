@@ -89,10 +89,10 @@ func TestTokens(t *testing.T) {
 	hash1 := strings.Repeat("a", 64)
 	hash2 := strings.Repeat("b", 64)
 	expired := strings.Repeat("c", 64)
-	s.CreateToken(ctx, hash1, "ana@example.com", "Ana", "cli", hour)
-	s.CreateToken(ctx, hash2, "ana@example.com", "Ana", "laptop", hour)
-	s.CreateToken(ctx, expired, "ana@example.com", "Ana", "old", time.Now().Add(-time.Second))
-	s.CreateToken(ctx, strings.Repeat("d", 64), "bo@example.com", "Bo", "cli", hour)
+	must(t, s.CreateToken(ctx, hash1, "ana@example.com", "Ana", "cli", hour))
+	must(t, s.CreateToken(ctx, hash2, "ana@example.com", "Ana", "laptop", hour))
+	must(t, s.CreateToken(ctx, expired, "ana@example.com", "Ana", "old", time.Now().Add(-time.Second)))
+	must(t, s.CreateToken(ctx, strings.Repeat("d", 64), "bo@example.com", "Bo", "cli", hour))
 
 	owner, err := s.LookupToken(ctx, hash1)
 	if err != nil || owner.Email != "ana@example.com" || owner.Name != "Ana" {
@@ -171,9 +171,11 @@ func TestTokenExpiryMigration(t *testing.T) {
 	}
 	// Reopening must not migrate twice.
 	s.Close()
-	if s, err = Open(dir); err != nil {
+	reopened, err := Open(dir)
+	if err != nil {
 		t.Fatal(err)
 	}
+	reopened.Close()
 }
 
 func TestDocCRUD(t *testing.T) {
@@ -422,11 +424,11 @@ func TestAIUsage(t *testing.T) {
 	if n, err := s.AITokensUsed(ctx, "ana@example.com", day); err != nil || n != 0 {
 		t.Fatalf("fresh = %d, %v", n, err)
 	}
-	s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 100, 20)
-	s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 50, 5)
-	s.RecordAIUsage(ctx, "ana@example.com", "game", day, 10, 1) // budgets span sites
-	s.RecordAIUsage(ctx, "bo@example.com", "blog", day, 999, 999)
-	s.RecordAIUsage(ctx, "ana@example.com", "blog", next, 7, 0) // next UTC day
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 100, 20))
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "blog", day, 50, 5))
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "game", day, 10, 1)) // budgets span sites
+	must(t, s.RecordAIUsage(ctx, "bo@example.com", "blog", day, 999, 999))
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "blog", next, 7, 0)) // next UTC day
 	if n, _ := s.AITokensUsed(ctx, "ana@example.com", day); n != 186 {
 		t.Errorf("ana today = %d, want 186", n)
 	}
@@ -434,7 +436,7 @@ func TestAIUsage(t *testing.T) {
 		t.Errorf("ana tomorrow = %d, want 7", n)
 	}
 	var requests int
-	s.db.QueryRow(`SELECT requests FROM ai_usage WHERE email = 'ana@example.com' AND site = 'blog' AND day = '2026-10-20'`).Scan(&requests)
+	must(t, s.db.QueryRow(`SELECT requests FROM ai_usage WHERE email = 'ana@example.com' AND site = 'blog' AND day = '2026-10-20'`).Scan(&requests))
 	if requests != 2 {
 		t.Errorf("requests = %d", requests)
 	}
@@ -447,7 +449,7 @@ func TestListDeploys(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	s.RecordDeploy(ctx, "other", "zed@example.com", 1, 1)
+	must(t, s.RecordDeploy(ctx, "other", "zed@example.com", 1, 1))
 	got, err := s.ListDeploys(ctx, "blog", 2)
 	if err != nil || len(got) != 2 || got[0].DeployedBy != "cy@example.com" || got[1].DeployedBy != "bo@example.com" || got[0].Files != 3 {
 		t.Errorf("deploys = %+v, %v", got, err)
@@ -457,16 +459,23 @@ func TestListDeploys(t *testing.T) {
 func TestAIUsageBySite(t *testing.T) {
 	s := open(t)
 	today := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
-	s.RecordAIUsage(ctx, "ana@example.com", "blog", today, 10, 10)
-	s.RecordAIUsage(ctx, "ana@example.com", "blog", today.AddDate(0, 0, -3), 5, 5)
-	s.RecordAIUsage(ctx, "bo@example.com", "blog", today, 100, 100)
-	s.RecordAIUsage(ctx, "bo@example.com", "blog", today.AddDate(0, 0, -40), 9999, 0) // outside the window
-	s.RecordAIUsage(ctx, "cy@example.com", "game", today, 50, 50)                     // other site
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "blog", today, 10, 10))
+	must(t, s.RecordAIUsage(ctx, "ana@example.com", "blog", today.AddDate(0, 0, -3), 5, 5))
+	must(t, s.RecordAIUsage(ctx, "bo@example.com", "blog", today, 100, 100))
+	must(t, s.RecordAIUsage(ctx, "bo@example.com", "blog", today.AddDate(0, 0, -40), 9999, 0)) // outside the window
+	must(t, s.RecordAIUsage(ctx, "cy@example.com", "game", today, 50, 50))                     // other site
 	got, err := s.AIUsageBySite(ctx, "blog", today.AddDate(0, 0, -29))
 	if err != nil || len(got) != 2 {
 		t.Fatalf("usage = %+v, %v", got, err)
 	}
 	if got[0].Email != "bo@example.com" || got[0].InputTokens != 100 || got[1].Email != "ana@example.com" || got[1].Requests != 2 || got[1].InputTokens != 15 {
 		t.Errorf("usage = %+v", got)
+	}
+}
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

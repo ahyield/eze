@@ -46,7 +46,7 @@ func (l *localBackend) publish(name, staging string) error {
 	}
 	if err := os.Rename(staging, target); err != nil {
 		if old != "" {
-			os.Rename(old, target) // put the previous version back
+			_ = os.Rename(old, target) // put the previous version back
 		}
 		return err
 	}

@@ -81,7 +81,9 @@ func TestIndexEscapesSiteData(t *testing.T) {
 func TestIndexShowsAIUsage(t *testing.T) {
 	e := newEnv(t)
 	e.srv.ai = ai.NewAnthropic("sk-test", "http://127.0.0.1:1")
-	e.store.RecordAIUsage(context.Background(), ana, "blog", time.Now(), 1200, 34)
+	if err := e.store.RecordAIUsage(context.Background(), ana, "blog", time.Now(), 1200, 34); err != nil {
+		t.Fatal(err)
+	}
 	_, body := page(t, e, "https://eze.test/", ana)
 	mustContain(t, body, "AI today: 1,234 of 1,000,000 tokens")
 }
@@ -92,7 +94,9 @@ func TestSitePage(t *testing.T) {
 	e.deploy("blog", ana, map[string]string{"index.html": "v1"})
 	e.deploy("blog", bo, map[string]string{"index.html": "v2", "a.js": "1"})
 	e.upload("blog", ana, "photo.png", "", []byte("png"))
-	e.store.RecordAIUsage(context.Background(), bo, "blog", time.Now(), 5000, 120)
+	if err := e.store.RecordAIUsage(context.Background(), bo, "blog", time.Now(), 5000, 120); err != nil {
+		t.Fatal(err)
+	}
 
 	code, body := page(t, e, "https://eze.test/sites/blog", ana)
 	if code != 200 {

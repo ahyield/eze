@@ -524,7 +524,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, rel string, f
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		}
 		w.WriteHeader(status)
-		io.Copy(w, f)
+		_, _ = io.Copy(w, f)
 		return
 	}
 	http.ServeContent(w, r, fi.Name(), fi.ModTime(), rs)

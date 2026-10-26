@@ -109,7 +109,9 @@ func (e *mcpEnv) call(name string, args any, wantErr bool) (map[string]any, stri
 	var out map[string]any
 	if res.StructuredContent != nil {
 		b, _ := json.Marshal(res.StructuredContent)
-		json.Unmarshal(b, &out)
+		if err := json.Unmarshal(b, &out); err != nil {
+			e.t.Fatal(err)
+		}
 	}
 	return out, text.String()
 }
@@ -169,8 +171,12 @@ func TestMCPTools(t *testing.T) {
 
 	// Deploy a folder, which also records the site name in eze.json.
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "index.html"), []byte("folder site"), 0o644)
-	os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=1"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("folder site"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("SECRET=1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out, _ = e.call("deploy_folder", map[string]any{"path": dir, "site": "folder-site"}, false)
 	if out["url"] != "http://folder-site.eze.test/" || out["files"] != 1.0 {
 		t.Errorf("deploy_folder = %v", out)

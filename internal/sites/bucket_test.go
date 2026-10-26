@@ -72,7 +72,9 @@ func TestBucketRedeployRemovesOldFiles(t *testing.T) {
 	b := memblob.OpenBucket(nil)
 	ctx := context.Background()
 	// Left by a deploy that crashed before writing its manifest.
-	b.WriteAll(ctx, "sites/blog/20200101T000000Z-dead/index.html", []byte("orphan"), nil)
+	if err := b.WriteAll(ctx, "sites/blog/20200101T000000Z-dead/index.html", []byte("orphan"), nil); err != nil {
+		t.Fatal(err)
+	}
 	s := bucketStore(t, b)
 	deploy(t, s, map[string]string{"index.html": "v1", "old.html": "old"})
 	deploy(t, s, map[string]string{"index.html": "v2"})
@@ -112,7 +114,9 @@ func TestBucketSurvivesRestart(t *testing.T) {
 	ctx := context.Background()
 	deploy(t, bucketStore(t, b), map[string]string{"index.html": "home", "docs/index.html": "docs"})
 	// A first deploy of another site that never got its manifest.
-	b.WriteAll(ctx, "sites/ghost/20200101T000000Z-dead/index.html", []byte("x"), nil)
+	if err := b.WriteAll(ctx, "sites/ghost/20200101T000000Z-dead/index.html", []byte("x"), nil); err != nil {
+		t.Fatal(err)
+	}
 
 	s := bucketStore(t, b) // as if eze restarted
 	if w := get(s, "blog", "/docs/"); w.Code != 200 || w.Body.String() != "docs" {
@@ -145,7 +149,11 @@ func TestBucketFailedUploadKeepsPreviousVersion(t *testing.T) {
 	if err := os.Chmod(site, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(site, 0o755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(site, 0o755); err != nil {
+			t.Error(err)
+		}
+	})
 	if _, _, err := s.Deploy("blog", bytes.NewReader(testutil.Files(t, map[string]string{"index.html": "v2"}))); err == nil {
 		t.Fatal("deploy succeeded on a read-only bucket")
 	}
@@ -156,9 +164,14 @@ func TestBucketFailedUploadKeepsPreviousVersion(t *testing.T) {
 
 func TestImport(t *testing.T) {
 	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "a"), 0o755)
-	os.WriteFile(filepath.Join(src, "index.html"), []byte("home"), 0o644)
-	os.WriteFile(filepath.Join(src, "a", "b.txt"), []byte("b"), 0o644)
+	if err := os.MkdirAll(filepath.Join(src, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"index.html": "home", "a/b.txt": "b"} {
+		if err := os.WriteFile(filepath.Join(src, filepath.FromSlash(name)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	s := bucketStore(t, memblob.OpenBucket(nil))
 	if err := s.Import("blog", src); err != nil {
 		t.Fatal(err)

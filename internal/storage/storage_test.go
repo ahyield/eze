@@ -16,7 +16,9 @@ func TestReader(t *testing.T) {
 	ctx := context.Background()
 	b := memblob.OpenBucket(nil)
 	defer b.Close()
-	b.WriteAll(ctx, "k", []byte("0123456789"), nil)
+	if err := b.WriteAll(ctx, "k", []byte("0123456789"), nil); err != nil {
+		t.Fatal(err)
+	}
 
 	r := NewReader(ctx, b, "k", 10)
 	defer r.Close()
@@ -29,9 +31,13 @@ func TestReader(t *testing.T) {
 	if got, _ := io.ReadAll(r); string(got) != "6789" {
 		t.Errorf("read from 6 = %q", got)
 	}
-	r.Seek(2, io.SeekStart)
+	if _, err := r.Seek(2, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
 	buf := make([]byte, 3)
-	io.ReadFull(r, buf)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		t.Fatal(err)
+	}
 	if string(buf) != "234" {
 		t.Errorf("read from 2 = %q", buf)
 	}
@@ -53,7 +59,9 @@ func TestDeletePrefix(t *testing.T) {
 	b := memblob.OpenBucket(nil)
 	defer b.Close()
 	for _, k := range []string{"a/1", "a/2/3", "ab/1", "b/1"} {
-		b.WriteAll(ctx, k, []byte("x"), nil)
+		if err := b.WriteAll(ctx, k, []byte("x"), nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := DeletePrefix(ctx, b, "a/"); err != nil {
 		t.Fatal(err)
@@ -85,8 +93,14 @@ func TestProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ro.Close()
-	os.Chmod(dir, 0o555)
-	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o755); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := probe(ctx, ro); err == nil || !strings.Contains(err.Error(), "writing") {
 		t.Errorf("read-only bucket: %v", err)
 	}

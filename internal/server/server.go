@@ -114,8 +114,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	host := strings.ToLower(r.Host)
 	var mux *http.ServeMux
-	switch {
-	case host == s.cfg.Domain:
+	switch host {
+	case s.cfg.Domain:
 		if strings.HasPrefix(r.URL.Path, "/_eze/auth/") {
 			s.public.ServeHTTP(w, r)
 			return
@@ -220,7 +220,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
