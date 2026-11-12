@@ -72,7 +72,7 @@ viewer's existing session, and rate limited per user.
 
 ## Install
 
-One binary is both the server and the CLI. With Go 1.26 or newer:
+One binary is both the server and the CLI. With Go 1.27 or newer:
 
 ```sh
 go install github.com/ahyield/eze/cmd/eze@latest
