@@ -79,6 +79,7 @@ go install github.com/ahyield/eze/cmd/eze@latest
 ```
 
 Or build the server image with `docker build -t eze .` (see [docs/deploy.md](docs/deploy.md)).
+From a clone, `make build` builds `./eze` and `make install` installs it.
 
 ## Run it
 
@@ -135,18 +136,24 @@ See [docs/deploy.md](docs/deploy.md) for complete setups.
 
 ### Try it locally
 
+From a clone, start a dev server where everyone is `dev@localhost`:
+
 ```sh
-go build -o eze ./cmd/eze
-EZE_DOMAIN=localhost:8080 EZE_SCHEME=http EZE_AUTH=dev EZE_ADDR=127.0.0.1:8080 ./eze serve
+make run          # or: make docker-run, to run the Docker image instead
 ```
 
-In another terminal (`*.localhost` resolves to your machine in Chrome, Firefox and curl):
+That builds `./eze` and runs it with
+`EZE_DOMAIN=localhost:8080 EZE_SCHEME=http EZE_AUTH=dev EZE_ADDR=127.0.0.1:8080`.
+Pass `PORT=9000` for another port. In another terminal (`*.localhost` resolves to your
+machine in Chrome, Firefox and curl):
 
 ```sh
-./eze login http://localhost:8080
+make login
 ./eze init hello && cd hello && ../eze deploy
 open http://hello.localhost:8080
 ```
+
+`make docker-logs` follows the container's logs and `make docker-stop` stops it.
 
 ## Use it from your AI tool (MCP)
 
@@ -221,6 +228,15 @@ sqlite3 eze.db "SELECT day, email, site, requests, input_tokens, output_tokens F
 ```
 
 ## Contributing
+
+`make help` lists the development tasks. The usual loop:
+
+```sh
+make test         # the tests; Node 22+ also runs the browser code checks
+make check        # what CI runs: gofmt, go vet, golangci-lint, tests with -race
+make smoke        # deploy, upload, restart and delete against a real server
+make site         # preview eze.page at http://localhost:8000
+```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 

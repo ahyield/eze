@@ -1,9 +1,13 @@
 name: ci
 
+# Docs and the landing page can't break the build. If these jobs ever become required
+# checks, ignored-only PRs never report them; add an always-run job to require instead.
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "site/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "site/**", "LICENSE"]
 
 permissions:
   contents: read
