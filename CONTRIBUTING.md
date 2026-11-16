@@ -11,6 +11,9 @@ Thanks for helping. A few things keep eze what it is:
 
 ## Development
 
+`make help` lists the common tasks: `make run` starts a local dev server, `make test` and
+`make check` run what CI runs, and `make docker-run` runs the image locally. By hand:
+
 ```sh
 go test ./...             # needs Go 1.27+; Node 22+ also runs the browser code checks
 go test -race ./...
