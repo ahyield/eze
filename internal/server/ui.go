@@ -150,8 +150,13 @@ func (s *Server) page(r *http.Request, title string) map[string]any {
 type siteRow struct {
 	store.Site
 	URL       string
+	Host      string
 	CanManage bool
+	More      bool // past the first few of others' sites; hidden until searched or "Show all"
 }
+
+// homeRecentOthers is how many of other people's sites the home page shows before "Show all".
+const homeRecentOthers = 10
 
 // knownSite is what the drop zone needs to warn before replacing a site.
 type knownSite struct {
@@ -167,16 +172,27 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, r, err)
 		return
 	}
-	rows := make([]siteRow, len(list))
+	// The home page shows your sites (created or last deployed by you), then others' sites,
+	// most recently updated first; ListSites already sorts by update time.
+	var mine, others []siteRow
 	known := make(map[string]knownSite, len(list))
 	for i := range list {
 		site := &list[i]
-		rows[i] = siteRow{*site, s.cfg.SiteURL(site.Name), s.canManage(user, site)}
-		known[site.Name] = knownSite{site.DeployedBy, rows[i].CanManage, site.Owner}
+		row := siteRow{Site: *site, URL: s.cfg.SiteURL(site.Name), Host: site.Name + "." + s.cfg.Domain, CanManage: s.canManage(user, site)}
+		known[site.Name] = knownSite{site.DeployedBy, row.CanManage, site.Owner}
+		if site.Owner == user.Email || site.DeployedBy == user.Email {
+			mine = append(mine, row)
+		} else {
+			row.More = len(others) >= homeRecentOthers
+			others = append(others, row)
+		}
 	}
 	data := s.page(r, "eze")
 	data["Name"] = "" // the drop zone is not tied to a site here
-	data["Sites"] = rows
+	data["Sites"] = len(list)
+	data["Mine"] = mine
+	data["Others"] = others
+	data["MoreOthers"] = len(others) > homeRecentOthers
 	data["Known"] = known
 	data["MaxDeployBytes"] = s.cfg.MaxDeployBytes
 	if s.ai != nil {

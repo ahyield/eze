@@ -99,14 +99,22 @@
 
 {{if .CanManage}}
 <h2><span>Delete</span></h2>
-<form class="danger-zone" data-delete-site="{{.Name}}">
+<div class="danger-zone">
   <p>Deletes the site, its database and its uploaded files for everyone. This can't be undone.</p>
-  <div class="row">
-    <input type="text" placeholder="Type {{.Name}} to confirm" aria-label="Type the site name to confirm" autocomplete="off" data-confirm>
-    <button class="btn danger" type="submit" disabled>Delete</button>
-  </div>
-  <p class="notice warn" data-error hidden style="margin:12px 0 0"></p>
-</form>
+  <button class="btn danger" type="button" data-open-delete>Delete {{.Name}}</button>
+</div>
+<dialog class="modal" data-delete-dialog aria-labelledby="delete-title">
+  <form data-delete-site="{{.Name}}">
+    <h3 id="delete-title">Delete {{.Name}}?</h3>
+    <p>Its pages, database and uploaded files go away for everyone. This can't be undone.</p>
+    <input type="text" placeholder="Type {{.Name}} to confirm" aria-label="Type the site name to confirm" autocomplete="off" spellcheck="false" data-confirm>
+    <p class="notice warn" data-error hidden></p>
+    <div class="row">
+      <button class="btn" type="button" data-cancel>Cancel</button>
+      <button class="btn danger" type="submit" disabled>Delete site</button>
+    </div>
+  </form>
+</dialog>
 {{end}}
 
 {{else}}

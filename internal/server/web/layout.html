@@ -4,15 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
+<meta name="theme-color" content="#eceef1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#10131a" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="/_eze/app.css">
+<script>
+  // Apply the saved theme before the page paints. data-shown is the theme actually on screen.
+  (function () {
+    var root = document.documentElement, saved = null;
+    try { saved = localStorage.getItem('eze-theme'); } catch (e) {}
+    if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
+    var dark = matchMedia('(prefers-color-scheme: dark)');
+    var colors = document.querySelectorAll('meta[name="theme-color"]');
+    function show() {
+      root.dataset.shown = root.dataset.theme || (dark.matches ? 'dark' : 'light');
+      // A chosen theme pins the browser bar colour; otherwise each tag keeps its media query.
+      colors.forEach(function (meta) {
+        var scheme = /dark/.test(meta.dataset.media || (meta.dataset.media = meta.media)) ? 'dark' : 'light';
+        meta.media = !root.dataset.theme ? meta.dataset.media : scheme === root.dataset.theme ? 'all' : 'not all';
+      });
+      var button = document.querySelector('.theme');
+      if (button) {
+        button.setAttribute('aria-pressed', root.dataset.shown === 'dark');
+        button.title = root.dataset.shown === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+      }
+    }
+    show();
+    document.addEventListener('DOMContentLoaded', show);
+    dark.addEventListener('change', show);
+    window.ezeToggleTheme = function () {
+      var next = root.dataset.shown === 'dark' ? 'light' : 'dark';
+      // Picking the system's own theme clears the choice, so it follows the system again.
+      if (next === (dark.matches ? 'dark' : 'light')) delete root.dataset.theme; else root.dataset.theme = next;
+      try { root.dataset.theme ? localStorage.setItem('eze-theme', next) : localStorage.removeItem('eze-theme'); } catch (e) {}
+      show();
+    };
+  })();
+</script>
 </head>
 <body>
 <main>
 <header class="top">
-  <a class="brand" href="/">eze</a>
+  <a class="brand" href="/" aria-label="eze, all sites"><svg viewBox="-2 -3 78 38" fill="none" stroke="currentColor" stroke-width="4" aria-hidden="true"><path d="M 2 16 H 22 A 10 10 0 1 0 19.66 22.43" transform="rotate(-35 12 16)"/><g transform="rotate(-7 47 26)"><path d="M 30 8 H 47 L 30 24 H 47"/><path d="M 51 16 H 71 A 10 10 0 1 0 68.66 22.43"/></g></svg></a>
   <div class="who">
     <span>{{.User.Email}}</span>
     {{if .OIDC}}<form method="post" action="/_eze/auth/logout"><button class="linkish">Sign out</button></form>{{end}}
+    <button class="theme" type="button" onclick="ezeToggleTheme()" aria-label="Dark mode">
+      <svg class="moon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 12.2A7 7 0 0 1 7.8 3.5a7 7 0 1 0 8.7 8.7Z"/></svg>
+      <svg class="sun" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="3.4"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg>
+    </button>
   </div>
 </header>
 {{end}}
@@ -26,12 +65,14 @@
 
 {{define "dropzone"}}
 <section class="drop" data-drop data-site="{{.Name}}" data-domain="{{.Domain}}" data-scheme="{{.Scheme}}" data-max="{{.MaxDeployBytes}}">
+  <span class="tab" aria-hidden="true"><span class="label">{{if .Name}}{{.Name}}/{{else}}new-site/{{end}}</span></span>
+  <i class="paper" aria-hidden="true"></i>
   <div data-idle>
     <p class="title">{{if .Name}}Drop a new version of {{.Name}}{{else}}Drop a folder to deploy it{{end}}</p>
-    <p class="hint">A folder, a .zip, or your HTML, CSS and JS files. {{if .Name}}It replaces the whole site.{{else}}It goes live at <span class="mono">name.{{.Domain}}</span>{{end}}</p>
+    <p class="hint">Drag in a folder, a .zip, or your HTML, CSS and JS files. {{if .Name}}It replaces the whole site.{{else}}It goes live at <span class="mono">name.{{.Domain}}</span>{{end}}</p>
     <div class="actions">
-      <label class="btn">Choose folder<input type="file" webkitdirectory multiple data-pick-folder></label>
       <label class="btn">Choose files<input type="file" multiple data-pick-file></label>
+      <label class="pick-folder">or pick a folder<input type="file" webkitdirectory multiple data-pick-folder></label>
     </div>
   </div>
   <div class="stage" data-stage hidden></div>

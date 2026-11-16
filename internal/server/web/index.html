@@ -2,31 +2,45 @@
 {{template "dropzone" .}}
 <script type="application/json" id="known-sites">{{json .Known}}</script>
 
-<p class="muted" style="font-size:14px;margin:12px 2px 0">
-  Prefer the terminal? <code>eze login {{.Server}}</code>, then <code>eze init</code> and <code>eze deploy</code>.
-  {{with .AI}}<span style="float:right">AI today: {{num .Used}} of {{num .Limit}} tokens</span>{{end}}
-</p>
+<div class="aside">
+  <p>Prefer the terminal? <button class="copy" type="button" data-copy="eze login {{.Server}}" title="Copy"><code>eze login {{.Server}}</code></button>, then <code>eze init</code> and <code>eze deploy</code>.</p>
+  {{with .AI}}<div class="budget" title="Resets at 00:00 UTC">AI today: {{num .Used}} of {{num .Limit}} tokens <div class="meter"><div style="width:{{percent .Used .Limit}}%"></div></div></div>{{end}}
+</div>
 
-<h2>
-  <span>Sites <span class="count">{{len .Sites}}</span></span>
-</h2>
 {{if .Sites}}
-<input type="search" placeholder="Search sites or people" aria-label="Search sites" data-site-search style="margin-bottom:8px">
-<table class="table" data-site-table>
-  <thead><tr><th>Site</th><th class="hide-sm">Last deployed by</th><th>Updated</th><th></th></tr></thead>
-  <tbody>
-  {{range .Sites}}
-    <tr data-search="{{.Name}} {{.DeployedBy}} {{.Owner}}">
-      <td><a class="site-name" href="/sites/{{.Name}}">{{.Name}}</a></td>
-      <td class="hide-sm muted">{{.DeployedBy}}</td>
-      <td class="muted"><time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{ago .UpdatedAt}}</time></td>
-      <td class="num"><a href="{{.URL}}">Open</a></td>
-    </tr>
+<div class="list-head">
+  <h2>Your sites<span class="count">{{len .Mine}}</span></h2>
+  <label class="search"><input type="search" placeholder="Search all sites or people" aria-label="Search all sites" aria-keyshortcuts="/" data-site-search><kbd aria-hidden="true">/</kbd></label>
+</div>
+<section data-site-group>
+  {{if .Mine}}
+  <ul class="sites" data-site-table>{{range .Mine}}{{template "site-row" .}}{{end}}</ul>
+  {{else}}
+  <p class="empty" data-site-empty>You haven't deployed a site yet. Drop a folder above to make your first.</p>
   {{end}}
-  </tbody>
-</table>
+</section>
+{{if .Others}}
+<section data-site-group>
+  <h2 class="sub">Recently updated by others</h2>
+  <ul class="sites" data-site-table>{{range .Others}}{{template "site-row" .}}{{end}}</ul>
+  {{if .MoreOthers}}<button class="more" type="button" data-show-all>Show all {{len .Others}} sites by others</button>{{end}}
+</section>
+{{end}}
 <p class="empty" data-no-results hidden>No sites match.</p>
 {{else}}
 <div class="empty">Nothing here yet. Drop the first site above.</div>
 {{end}}
 {{template "foot" .}}
+
+{{define "site-row"}}
+<li data-search="{{.Name}} {{.DeployedBy}} {{.Owner}}"{{if .More}} data-more hidden{{end}}>
+  <span class="glyph" aria-hidden="true"></span>
+  <div>
+    <a class="site-name" href="/sites/{{.Name}}">{{.Name}}</a>
+    <span class="host mono">{{.Host}}</span>
+  </div>
+  <span class="by hide-sm" title="Last deployed by {{.DeployedBy}}">{{.DeployedBy}}</span>
+  <time datetime="{{.UpdatedAt.Format "2006-01-02T15:04:05Z07:00"}}" title="{{.UpdatedAt.Format "Jan 2, 2006 15:04 MST"}}">{{ago .UpdatedAt}}</time>
+  <a class="btn small" href="{{.URL}}">Open</a>
+</li>
+{{end}}
