@@ -4,16 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Authorize CLI</title>
+<script>
+  // Follow the theme picked on the dashboard.
+  try { var t = localStorage.getItem('eze-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
-  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; }
+  :root { --bg: #eceef1; --fg: #151922; --muted: #5b6474; --line: #d5d9e0; --card: #fff; --accent: #2343d6; --accent-ink: #fff; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0c0a09; --fg: #f5f5f4; --muted: #a8a29e; --line: #292524; --card: #1c1917; --accent: #3b82f6; }
+    :root:not([data-theme="light"]) { --bg: #10131a; --fg: #eef0f4; --muted: #a3abb9; --line: #262b36; --card: #181c25; --accent: #8a9dff; --accent-ink: #0d1240; }
   }
+  :root[data-theme="dark"] { --bg: #10131a; --fg: #eef0f4; --muted: #a3abb9; --line: #262b36; --card: #181c25; --accent: #8a9dff; --accent-ink: #0d1240; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; padding: 16px; box-sizing: border-box; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 32px; max-width: 400px; width: 100%; }
   h1 { font-size: 20px; margin: 0 0 8px; }
   p { color: var(--muted); margin: 0 0 24px; }
-  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>

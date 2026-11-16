@@ -190,6 +190,7 @@
     };
     const reset = () => {
       busy = false;
+      zone.classList.remove('done');
       stage.hidden = true;
       stage.replaceChildren();
       idle.hidden = false;
@@ -213,10 +214,15 @@
       const { zip, files } = picked;
       if (!zip && !files.length) return fail('Nothing to deploy: no files left after skipping hidden files and node_modules.');
       busy = false;
-      confirm(picked);
+      // Deploy straight away when the name is settled: a redeploy from a site's page, or a
+      // new name taken from the folder. Ask only when there is no usable name or it would
+      // replace an existing site.
+      const name = fixedName || picked.name;
+      if (fixedName || (SITE_NAME.test(name) && !RESERVED.has(name) && !known[name])) return deploy(name, picked);
+      askName(picked);
     }
 
-    function confirm(picked) {
+    function askName(picked) {
       const total = picked.zip ? picked.zip.size : picked.files.reduce((n, f) => n + f.file.size, 0);
       const what = picked.zip ? picked.zip.name + ' (' + humanBytes(total) + ')' : picked.files.length + ' file' + (picked.files.length === 1 ? '' : 's') + ', ' + humanBytes(total);
 
@@ -278,11 +284,12 @@
         }
         label.textContent = 'Uploading ' + humanBytes(body.size) + '...';
         const res = await upload(name, body, picked.zip ? 'application/zip' : 'application/gzip', (p) => {
-          bar.style.width = Math.round(p * 100) + '%';
+          bar.style.transform = 'scaleX(' + p + ')';
           if (p >= 1) label.textContent = 'Publishing...';
         });
         busy = false;
         const url = res.url || scheme + '://' + name + '.' + domain + '/';
+        zone.classList.add('done');
         show(
           el('p', { class: 'success' }, name + ' is live.'),
           el('p', { class: 'summary' }, el('a', { href: url }, url)),
@@ -296,14 +303,32 @@
       }
     }
 
+    // On the home page a drop anywhere in the window deploys; on a site's page only the
+    // folder itself takes drops, so a stray drop can't replace the site.
+    const target = fixedName ? zone : window;
+    const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
     let depth = 0; // dragenter/leave fire for children too
-    zone.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; zone.classList.add('over'); });
-    zone.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-    zone.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; zone.classList.remove('over'); } });
-    zone.addEventListener('drop', (e) => {
+    target.addEventListener('dragenter', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      if (!busy) zone.classList.add('over');
+    });
+    target.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+    });
+    target.addEventListener('dragleave', (e) => {
+      if (!hasFiles(e)) return;
+      if (--depth <= 0) { depth = 0; zone.classList.remove('over'); }
+    });
+    target.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
       e.preventDefault();
       depth = 0;
       zone.classList.remove('over');
+      zone.classList.remove('done');
       prepare(() => fromDrop(e.dataTransfer));
     });
     zone.querySelectorAll('[data-pick-folder], [data-pick-file]').forEach((input) => {
@@ -314,26 +339,83 @@
     window.addEventListener('drop', (e) => e.preventDefault());
   }
 
+  // setupSearch filters every site on the home page, including others' sites past the first
+  // few, which stay hidden until searched for or "Show all" is pressed.
   function setupSearch(input) {
-    const rows = [...document.querySelectorAll('[data-site-table] tbody tr')];
+    const rows = [...document.querySelectorAll('[data-site-table] [data-search]')];
+    const groups = [...document.querySelectorAll('[data-site-group]')];
     const none = document.querySelector('[data-no-results]');
-    input.addEventListener('input', () => {
+    const showAll = document.querySelector('[data-show-all]');
+    let all = false;
+    const filter = () => {
       const q = input.value.trim().toLowerCase();
       let shown = 0;
       for (const row of rows) {
-        const match = !q || row.dataset.search.toLowerCase().includes(q);
+        const match = q ? row.dataset.search.toLowerCase().includes(q) : all || !('more' in row.dataset);
         row.hidden = !match;
         if (match) shown++;
       }
-      if (none) none.hidden = shown > 0;
+      // While searching, drop groups with no matches and the "no sites yet" and "Show all" hints.
+      for (const group of groups) {
+        const hits = group.querySelectorAll('[data-search]:not([hidden])').length;
+        group.hidden = Boolean(q) && hits === 0;
+        group.querySelectorAll('[data-site-empty]').forEach((p) => { p.hidden = Boolean(q); });
+      }
+      if (showAll) showAll.hidden = Boolean(q) || all;
+      if (none) none.hidden = !q || shown > 0;
+    };
+    input.addEventListener('input', filter);
+    if (showAll) showAll.addEventListener('click', () => { all = true; filter(); });
+    // "/" jumps to search from anywhere; Escape clears it.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t.closest('input, textarea, select, [contenteditable]')) return;
+      e.preventDefault();
+      input.focus();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      input.value = '';
+      input.dispatchEvent(new Event('input'));
+      input.blur();
     });
   }
 
+  function setupCopy(button) {
+    let timer;
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+      } catch {
+        return; // no clipboard access (plain http); the text is still there to select
+      }
+      button.classList.add('copied');
+      clearTimeout(timer);
+      timer = setTimeout(() => button.classList.remove('copied'), 1500);
+    });
+  }
+
+  // setupDelete wires the delete dialog: type the site's name, then delete.
   function setupDelete(form) {
     const name = form.dataset.deleteSite;
+    const dialog = form.closest('dialog');
     const input = form.querySelector('[data-confirm]');
-    const button = form.querySelector('button');
+    const button = form.querySelector('button[type=submit]');
     const error = form.querySelector('[data-error]');
+    const close = () => {
+      dialog.close();
+      input.value = '';
+      button.disabled = true;
+      error.hidden = true;
+    };
+    document.querySelectorAll('[data-open-delete]').forEach((open) => open.addEventListener('click', () => {
+      dialog.showModal();
+      input.focus();
+    }));
+    form.querySelector('[data-cancel]').addEventListener('click', close);
+    dialog.addEventListener('cancel', (e) => { e.preventDefault(); close(); }); // Escape
+    dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); }); // the backdrop
     input.addEventListener('input', () => { button.disabled = input.value.trim() !== name; });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -359,6 +441,7 @@
     document.querySelectorAll('[data-drop]').forEach(setupDropzone);
     document.querySelectorAll('[data-site-search]').forEach(setupSearch);
     document.querySelectorAll('[data-delete-site]').forEach(setupDelete);
+    document.querySelectorAll('[data-copy]').forEach(setupCopy);
   }
 
   // Exposed for tests.
